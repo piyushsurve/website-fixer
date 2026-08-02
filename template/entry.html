@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Website Fixer Game</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    {{ css|safe }}
+  </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="flex justify-between items-center px-6 py-4 bg-white shadow-md">
+    <h1 class="text-2xl font-bold text-gray-800">Website Fixer Game</h1>
+    <div class="flex items-center space-x-4">
+      <span class="px-4 py-2 rounded-md bg-gray-200 text-gray-700 shadow">
+        👤 {{ request.user.username }}
+      </span>
+      <a href="/logout/" class="px-4 py-2 rounded-md bg-red-500 text-white shadow hover:bg-red-600">Logout</a>
+      <button type="button" id="previewBtn" class="px-4 py-2 rounded-md bg-blue-500 text-white shadow hover:bg-blue-600">Preview</button>
+      <button type="button" id="editorBtn" class="px-4 py-2 rounded-md bg-gray-300 text-gray-800 shadow hover:bg-gray-400">Code Editor</button>
+      <div id="timerDisplay" class="px-4 py-2 rounded-md bg-gray-200 text-gray-700 shadow">⏱ {{ remaining_time }}</div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 p-6">
+    <div id="previewSection" class="w-full h-full bg-white rounded-lg shadow-md flex items-center justify-center">
+      <iframe id="previewFrame" class="w-full h-full rounded-lg"></iframe>
+    </div>
+
+    <div id="editorSection" class="hidden w-full h-full grid grid-cols-2 gap-6">
+      <div class="bg-white rounded-lg shadow-md p-4 flex flex-col">
+        <h2 class="text-lg font-semibold mb-2">HTML Code</h2>
+        <!-- HTML textarea is now read-only/disabled for participants -->
+        <textarea id="htmlCode" class="flex-1 w-full p-3 border rounded-md bg-gray-50 text-sm font-mono" disabled readonly aria-disabled="true">
+<div class="card">
+  <h1>Hello World</h1>
+  <p>This is a full website preview inside the iframe.</p>
+  <button>Click Me</button>
+</div>
+        </textarea>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-md p-4 flex flex-col">
+        <h2 class="text-lg font-semibold mb-2">CSS Editor</h2>
+        <form id="cssForm" class="flex flex-col flex-1">
+          {% csrf_token %}
+          <textarea name="css" id="cssCode" class="flex-1 w-full p-3 border rounded-md bg-gray-50 text-sm font-mono">{{ css }}</textarea>
+          <button type="submit" id="submitBtn" class="mt-4 px-4 py-2 rounded-md bg-green-500 text-white shadow hover:bg-green-600">Submit CSS</button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+<script>
+  const previewBtn = document.getElementById('previewBtn');
+  const editorBtn = document.getElementById('editorBtn');
+  const previewSection = document.getElementById('previewSection');
+  const editorSection = document.getElementById('editorSection');
+  const iframe = document.getElementById('previewFrame');
+  const htmlCode = document.getElementById('htmlCode');
+  const timerDisplay = document.getElementById('timerDisplay');
+  const cssCode = document.getElementById('cssCode');
+  const submitBtn = document.getElementById('submitBtn');
+  const cssForm = document.getElementById("cssForm");
+
+  // Load HTML + CSS into iframe
+  function loadHtml(cssContent = cssCode.value) {
+    // Disabled textarea still exposes .value in JS; fallback to innerText if needed
+    const htmlValue = (htmlCode && typeof htmlCode.value !== 'undefined' && htmlCode.value.trim() !== '') 
+      ? htmlCode.value 
+      : htmlCode.innerText || `
+<div class="card">
+  <h1>Hello World</h1>
+  <p>This is a full website preview inside the iframe.</p>
+  <button>Click Me</button>
+</div>`;
+
+    const fullHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>Preview</title>
+        <style>${cssContent}</style>
+      </head>
+      <body>${htmlValue}</body>
+      </html>
+    `;
+    iframe.srcdoc = fullHtml;
+  }
+
+  // AJAX submit for CSS
+  cssForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(cssForm);
+    const response = await fetch("/save-css/", { method: "POST", body: formData });
+    const data = await response.json();
+
+    if (data.error) {
+      alert(data.error);
+    } else {
+      // sync timer with backend
+      timeLeft = data.remaining_time;
+      // update preview with new CSS
+      loadHtml(data.css);
+    }
+  });
+
+  previewBtn.addEventListener('click', () => {
+    previewSection.classList.remove('hidden');
+    editorSection.classList.add('hidden');
+    loadHtml();
+  });
+
+  editorBtn.addEventListener('click', () => {
+    editorSection.classList.remove('hidden');
+    previewSection.classList.add('hidden');
+  });
+
+  // ---------------- TIMER LOGIC ----------------
+  let timeLeft = {{ remaining_time|default:"0" }};
+  const timerInterval = setInterval(() => {
+    const minutes = Math.floor(timeLeft / 60);
+    const seconds = timeLeft % 60;
+    timerDisplay.textContent = `⏱ ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      timerDisplay.textContent = "⏱ Time's up!";
+      cssCode.disabled = true;
+      submitBtn.disabled = true;
+      submitBtn.classList.add("bg-gray-400", "cursor-not-allowed");
+      submitBtn.classList.remove("bg-green-500", "hover:bg-green-600");
+    }
+    timeLeft--;
+  }, 1000);
+</script>
+
+</body>
+</html>

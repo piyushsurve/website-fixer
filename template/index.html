@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Website Fixer Game</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Animated gradient background */
+    body {
+      background: radial-gradient(circle at top left, #0f172a, #1e1b4b, #312e81, #0f766e);
+      background-size: 200% 200%;
+      animation: gradientBG 15s ease infinite;
+    }
+    @keyframes gradientBG {
+      0% {background-position: 0% 50%;}
+      50% {background-position: 100% 50%;}
+      100% {background-position: 0% 50%;}
+    }
+
+    /* Neon glow utilities */
+    .neon-text {
+      text-shadow: 0 0 8px #38bdf8, 0 0 16px #a78bfa;
+    }
+    .neon-input {
+      box-shadow: 0 0 8px #06b6d4;
+    }
+    .neon-button {
+      box-shadow: 0 0 12px #ec4899, 0 0 24px #a78bfa;
+      transition: transform 0.2s ease, box-shadow 0.3s ease;
+    }
+    .neon-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 20px #ec4899, 0 0 40px #a78bfa;
+    }
+    .error-text {
+      text-shadow: 0 0 6px #f87171;
+    }
+
+    html { scroll-behavior: smooth; }
+  </style>
+</head>
+<body class="flex flex-col min-h-screen text-white font-sans">
+
+  <!-- HERO SECTION -->
+  <section class="flex-1 flex flex-col items-center justify-center text-center px-6">
+    <h1 class="text-5xl md:text-7xl font-extrabold neon-text mb-4">Website Fixer Game</h1>
+    <p class="text-xl md:text-2xl neon-text mb-8">Fix the Web. Show Your Creativity.</p>
+
+    <input id="pcCode" type="text" placeholder="Enter your PC Code"
+      class="neon-input bg-transparent border border-cyan-400 rounded-md px-4 py-2 text-center text-lg focus:outline-none focus:ring-2 focus:ring-cyan-300 mb-4 w-80">
+
+    <p id="errorMsg" class="hidden text-red-400 error-text mb-4">Please enter your PC Code!</p>
+
+    <button id="startBtn"
+      class="neon-button bg-purple-600 px-8 py-3 rounded-md text-lg font-semibold">Start Game</button>
+
+    <a href="#about" class="mt-10 text-cyan-300 hover:text-pink-400 transition">Learn More ↓</a>
+  </section>
+
+  <!-- ABOUT SECTION -->
+  <section id="about" class="bg-black bg-opacity-50 py-16 px-6 md:px-20">
+    <h2 class="text-3xl font-bold neon-text mb-12 text-center">About the Game</h2>
+    <div class="grid md:grid-cols-2 gap-10 max-w-6xl mx-auto">
+      
+      <!-- Objectives -->
+      <div class="p-6 rounded-lg bg-gray-900 bg-opacity-70 shadow-lg hover:shadow-xl transition">
+        <h3 class="text-xl font-semibold neon-text mb-4">Objectives</h3>
+        <ul class="list-disc list-inside space-y-2 text-gray-200">
+          <li>Test participants' creativity and CSS styling skills</li>
+          <li>Enhance UI/UX design thinking and aesthetics</li>
+          <li>Encourage problem-solving under constraints</li>
+          <li>Provide a fun, competitive learning environment</li>
+          <li>Improve practical frontend development skills</li>
+        </ul>
+      </div>
+
+      <!-- Concept -->
+      <div class="p-6 rounded-lg bg-gray-900 bg-opacity-70 shadow-lg hover:shadow-xl transition">
+        <h3 class="text-xl font-semibold neon-text mb-4">Concept</h3>
+        <p class="text-gray-200 mb-2">
+          Website Fixer is an interactive game where participants are given a pre-built HTML webpage without CSS styling. Their task is to improve the visual appearance using only CSS.
+        </p>
+        <p class="text-gray-200">
+          Participants must use ONLY predefined CSS selectors, without creating new ones. This ensures fairness and focuses on creativity within constraints.
+        </p>
+      </div>
+
+      <!-- Game Flow -->
+      <div class="p-6 rounded-lg bg-gray-900 bg-opacity-70 shadow-lg hover:shadow-xl transition">
+        <h3 class="text-xl font-semibold neon-text mb-4">Game Flow</h3>
+        <ul class="list-disc list-inside space-y-2 text-gray-200">
+          <li>User enters PC Code and starts game</li>
+          <li>Timer of 150 minutes begins</li>
+          <li>Interface contains Website Preview + Code Editor</li>
+          <li>Users apply CSS to improve design</li>
+          <li>Restrictions: HTML cannot be modified, only given selectors allowed</li>
+        </ul>
+      </div>
+
+      <!-- Judging Criteria -->
+      <div class="p-6 rounded-lg bg-gray-900 bg-opacity-70 shadow-lg hover:shadow-xl transition">
+        <h3 class="text-xl font-semibold neon-text mb-4">Judging Criteria</h3>
+        <ul class="list-disc list-inside space-y-2 text-gray-200">
+          <li>Visual Design (UI attractiveness)</li>
+          <li>Creativity</li>
+          <li>Proper use of CSS</li>
+          <li>Clean and structured styling</li>
+          <li>Overall user experience</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="text-center py-6 text-sm neon-text">College Event 2026</footer>
+
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const pcCode = document.getElementById('pcCode');
+    const errorMsg = document.getElementById('errorMsg');
+
+    startBtn.addEventListener('click', () => {
+      if (pcCode.value.trim() === "") {
+        errorMsg.classList.remove('hidden');
+      } else {
+        errorMsg.classList.add('hidden');
+        window.location.href = "/game"; // redirect
+      }
+    });
+  </script>
+</body>
+</html>

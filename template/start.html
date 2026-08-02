@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Starting Game...</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+```
+<style>
+    /* Loader Animation */
+    .loader {
+        border-top-color: #3b82f6;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+```
+
+</head>
+
+<body class="bg-gray-900 flex items-center justify-center h-screen text-white">
+
+```
+<div class="text-center">
+
+    <!-- Game Title -->
+    <h1 class="text-3xl font-bold mb-6 animate-pulse">
+        🎮 Website Fixer Game
+    </h1>
+
+    <!-- Spinner -->
+    <div class="w-16 h-16 border-4 border-gray-600 border-t-blue-500 rounded-full loader mx-auto mb-6"></div>
+
+    <!-- Message -->
+    <p class="text-gray-300 text-lg">
+        Initializing game environment...
+    </p>
+
+    <!-- Progress Bar -->
+    <div class="w-64 bg-gray-700 rounded-full h-2 mt-6 mx-auto overflow-hidden">
+        <div id="progressBar" class="bg-blue-500 h-2 w-0"></div>
+    </div>
+
+</div>
+
+<script>
+    let width = 0;
+    const bar = document.getElementById("progressBar");
+
+    const interval = setInterval(() => {
+        width += 2;
+        bar.style.width = width + "%";
+
+        if (width >= 100) {
+            clearInterval(interval);
+            window.location.href = "/";
+        }
+    }, 40); // ~2 seconds total
+</script>
+```
+
+</body>
+</html>

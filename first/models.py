@@ -21,7 +21,7 @@ class UserManager(BaseUserManager):
 
 # Custom User Model
 class User(AbstractBaseUser):
-    username = models.CharField(max_length=100, unique=True)
+    username = models.CharField(max_length=100)
     pc_no = models.CharField(max_length=50, unique=True)
     password = models.CharField(max_length=128)
     is_active = models.BooleanField(default=True)

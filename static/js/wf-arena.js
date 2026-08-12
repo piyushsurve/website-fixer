@@ -1,13 +1,13 @@
 /*
  * Challenge arena controller: editor, sandboxed preview, countdown, checks.
  *
- * Round 01 is CSS only. `#wf-html` is a readonly view of the fixed markup --
+ * The round is CSS only. `#wf-html` is a readonly view of the fixed markup --
  * it is never bound to the editor handlers and never posted to the server.
  *
- * The countdown rendered here is only a display. `remaining` always comes
- * from the server (page load + periodic /api/state/ sync), and the server
- * refuses saves and checks once the session is over, so editing the numbers
- * in devtools buys the player nothing.
+ * Nothing here is authoritative. The countdown is a display; `remaining`,
+ * the score, Design Mode, the hint count and the final submission all come
+ * from the server, which refuses saves, checks, resets and hints once the
+ * deadline has passed. Editing numbers in devtools buys the player nothing.
  */
 (function () {
   'use strict';
@@ -20,15 +20,19 @@
   var PREVIEW_DEBOUNCE_MS = 400;
   var AUTOSAVE_DEBOUNCE_MS = 1200;
 
-  // Virtual viewport widths for the preview (see fitPreview).
+  // Virtual viewport widths for the previews (see fitFrame).
   var DESKTOP_WIDTH = 1120;
   var PHONE_WIDTH = 390;
+
+  var HINT_LEVELS = 3;
+  var LEVEL_NAMES = ['the idea', 'where to look', 'which property'];
 
   var el = {
     timer: document.getElementById('wf-timer'),
     timerValue: document.getElementById('wf-timer-value'),
     progressCount: document.getElementById('wf-progress-count'),
     progressFill: document.getElementById('wf-progress-fill'),
+    hintCount: document.getElementById('wf-hint-count'),
     html: document.getElementById('wf-html'),
     css: document.getElementById('wf-css'),
     preview: document.getElementById('wf-preview'),
@@ -38,21 +42,29 @@
     saveState: document.getElementById('wf-save-state'),
     editorHint: document.getElementById('wf-editor-hint'),
     objectives: document.getElementById('wf-objectives'),
-    modal: document.getElementById('wf-modal'),
-    modalBox: document.getElementById('wf-modal-box'),
-    modalIcon: document.getElementById('wf-modal-icon'),
-    modalTitle: document.getElementById('wf-modal-title'),
-    modalText: document.getElementById('wf-modal-text'),
-    modalObjectives: document.getElementById('wf-modal-objectives'),
-    modalTimeLabel: document.getElementById('wf-modal-timelabel'),
-    modalTime: document.getElementById('wf-modal-time'),
-    modalStatus: document.getElementById('wf-modal-status'),
-    modalClose: document.getElementById('wf-modal-close'),
+    mission: document.getElementById('wf-mission'),
+    designBanner: document.getElementById('wf-design-banner'),
+
     finalOpen: document.getElementById('wf-final-open'),
     finalClose: document.getElementById('wf-final-close'),
     final: document.getElementById('wf-final'),
     finalWrap: document.getElementById('wf-final-wrap'),
-    finalFrame: document.getElementById('wf-final-frame')
+    finalFrame: document.getElementById('wf-final-frame'),
+    finalTitle: document.getElementById('wf-final-title'),
+    finalTag: document.getElementById('wf-final-tag'),
+    finalFoot: document.getElementById('wf-final-foot'),
+
+    modal: document.getElementById('wf-modal'),
+    modalBox: document.getElementById('wf-modal-box'),
+    modalIcon: document.getElementById('wf-modal-icon'),
+    modalTitle: document.getElementById('wf-modal-title'),
+    modalHeadline: document.getElementById('wf-modal-headline'),
+    modalText: document.getElementById('wf-modal-text'),
+    modalObjectives: document.getElementById('wf-modal-objectives'),
+    modalStatus: document.getElementById('wf-modal-status'),
+    modalEligible: document.getElementById('wf-modal-eligible'),
+    modalHints: document.getElementById('wf-modal-hints'),
+    myDesign: document.getElementById('wf-my-design')
   };
 
   var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
@@ -94,8 +106,7 @@
   /*
    * NovaCloud is a complete HTML document, so it is rendered as written and
    * its <link rel="stylesheet"> is swapped for the player's live CSS. The
-   * stylesheet link is matched loosely (any href ending in style.css) so a
-   * player who retypes or moves it does not lose their preview.
+   * link is matched loosely so a player who moves it does not lose the view.
    */
   var STYLESHEET_LINK = /<link\b[^>]*href\s*=\s*["'][^"']*style\.css["'][^>]*>/i;
 
@@ -109,8 +120,6 @@
     if (/<\/head\s*>/i.test(html)) {
       return html.replace(/<\/head\s*>/i, style + '</head>');
     }
-    // Not a full document (they deleted the head, or pasted a fragment):
-    // wrap it so the preview still works.
     return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">' +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       style + '</head><body>' + html + '</body></html>';
@@ -128,9 +137,9 @@
   }
 
   /*
-   * Render the page at a fixed virtual width and scale it to fit the panel.
-   * Letting the iframe be panel-width instead would sit permanently inside
-   * NovaCloud's own 760px breakpoint, hiding the desktop-only mistakes.
+   * Render at a fixed virtual width and scale to fit. Sizing the iframe to
+   * the panel instead would sit permanently inside NovaCloud's own 860px
+   * breakpoint and hide the desktop-only mistakes.
    */
   function fitFrame(wrap, frame) {
     var phone = wrap.getAttribute('data-width') === 'phone';
@@ -188,6 +197,7 @@
     var seconds = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
     lastRemaining = seconds;
     paintTimer(seconds);
+    // The browser never decides the round is over -- it asks the server.
     if (seconds <= 0 && !locked) { syncState(); }
   }
 
@@ -203,8 +213,21 @@
     endsAt = Date.now() + data.remaining * 1000;
     lastRemaining = data.remaining;
     paintTimer(data.remaining);
-    if (data.completed) { lock('completed', data); }
-    else if (data.expired) { lock('expired', data); }
+
+    if (typeof data.hintsUsed === 'number') {
+      el.hintCount.textContent = data.hintsUsed;
+    }
+    if (data.designMode) { showDesignMode(); }
+
+    // Clearing every objective opens Design Mode; only the deadline locks.
+    if (data.expired) { lock(data); }
+  }
+
+  function showDesignMode() {
+    if (el.designBanner.hidden) {
+      el.designBanner.hidden = false;
+      el.mission.hidden = true;
+    }
   }
 
   // ----------------------------------------------------------- objectives --
@@ -238,9 +261,11 @@
       if (data.checks) { paintChecks(data.checks, passed); }
       setSaveState('saved', 'saved');
       applyState(data);
-      if (!data.completed && !data.expired) {
+      if (!data.expired) {
         var left = state.total - passed;
-        setSaveState('saved', left + ' objective' + (left === 1 ? '' : 's') + ' left');
+        setSaveState('saved', left === 0
+          ? 'all objectives clear — design freely'
+          : left + ' objective' + (left === 1 ? '' : 's') + ' left');
       }
     }).catch(function () {
       setSaveState('error', 'check failed — try again');
@@ -250,97 +275,127 @@
     });
   }
 
-  // --------------------------------------------------------------- hints --
+  // ---------------------------------------------------------------- hints --
 
-  function revealHint(button) {
-    var item = button.closest('.wf-objective');
-    var hints = item.querySelectorAll('.wf-objective__hint');
-    var next = null;
-    for (var i = 0; i < hints.length; i++) {
-      if (hints[i].hidden) { next = hints[i]; break; }
-    }
-    if (!next) { return; }
-    next.hidden = false;
+  /*
+   * Hints live on the server. Asking for one records that it was revealed --
+   * the first time only -- and returns the text. Nothing here can change the
+   * count; the browser renders whatever the server sends back.
+   */
+  function paintHint(objective, level, html) {
+    var box = el.objectives.querySelector('[data-hints-for="' + objective + '"]');
+    if (!box || box.querySelector('[data-hint-level="' + level + '"]')) { return; }
 
-    var shown = 0;
-    for (var j = 0; j < hints.length; j++) {
-      if (!hints[j].hidden) { shown += 1; }
-    }
-    if (shown >= hints.length) {
+    var node = document.createElement('p');
+    node.className = 'wf-objective__hint';
+    node.setAttribute('data-hint-level', level);
+    node.innerHTML = '<b>Hint ' + level + ' · ' + LEVEL_NAMES[level - 1] + '</b>' + html;
+    box.appendChild(node);
+
+    var button = el.objectives.querySelector('.wf-hint-btn[data-hint-for="' + objective + '"]');
+    if (!button) { return; }
+    var shown = box.querySelectorAll('.wf-objective__hint').length;
+    if (shown >= HINT_LEVELS) {
       button.hidden = true;
     } else {
-      button.textContent = 'Show hint ' + (shown + 1) + ' of ' + hints.length;
+      button.textContent = 'Show hint ' + (shown + 1) + ' of ' + HINT_LEVELS;
     }
+  }
+
+  function revealHint(button) {
+    if (locked) { return; }
+    var objective = button.getAttribute('data-hint-for');
+    var box = el.objectives.querySelector('[data-hints-for="' + objective + '"]');
+    var level = box.querySelectorAll('.wf-objective__hint').length + 1;
+    if (level > HINT_LEVELS) { return; }
+
+    button.disabled = true;
+    post(urls.hint, { objective: objective, level: level }).then(function (data) {
+      if (data.hintHtml) { paintHint(objective, data.level, data.hintHtml); }
+      applyState(data);
+    }).finally(function () {
+      if (!locked) { button.disabled = false; }
+    });
   }
 
   // --------------------------------------------------------------- ending --
 
-  function lock(reason, data) {
+  /*
+   * The deadline, and only the deadline, ends the round. By the time this
+   * runs the server has already snapshotted the stylesheet; this just
+   * reports what it decided.
+   */
+  function lock(data) {
     if (locked) { return; }
     locked = true;
     clearTimeout(saveTimer);
     el.css.disabled = true;
     el.run.disabled = true;
     el.reset.disabled = true;
+    Array.prototype.forEach.call(el.objectives.querySelectorAll('.wf-hint-btn'), function (button) {
+      button.disabled = true;
+    });
+    paintTimer(0);
 
     var score = data.score || 0;
+    var total = data.total || state.total;
+    var eligible = !!data.eligible;
 
-    if (reason === 'completed') {
-      el.timer.setAttribute('data-state', 'normal');
-      showModal({
-        outcome: 'win',
-        icon: '🏆',
-        title: 'Website fixed!',
-        text: 'You cleared every objective before the clock ran out.',
-        objectives: state.total + ' / ' + state.total,
-        timeLabel: 'Time remaining',
-        time: clock(Math.max(0, lastRemaining)),
-        status: 'PASSED'
-      });
-    } else {
-      paintTimer(0);
-      showModal({
-        outcome: 'timeout',
-        icon: '⏳',
-        title: "Time's up",
-        text: 'The session is over. Your last saved work has been kept.',
-        objectives: score + ' / ' + state.total,
-        timeLabel: 'Objectives left',
-        time: String(state.total - score),
-        status: 'TIMEOUT'
-      });
-    }
-  }
-
-  function showModal(view) {
-    el.modalBox.setAttribute('data-outcome', view.outcome);
-    el.modalIcon.textContent = view.icon;
-    el.modalTitle.textContent = view.title;
-    el.modalText.textContent = view.text;
-    el.modalObjectives.textContent = view.objectives;
-    el.modalTimeLabel.textContent = view.timeLabel;
-    el.modalTime.textContent = view.time;
-    el.modalStatus.textContent = view.status;
+    el.modalBox.setAttribute('data-outcome', eligible ? 'win' : 'timeout');
+    el.modalIcon.textContent = eligible ? '🏆' : '🏁';
+    el.modalTitle.textContent = "Time's up";
+    el.modalHeadline.textContent = score + ' / ' + total + ' objectives complete';
+    el.modalText.textContent = eligible
+      ? 'Design submitted. Your final NovaCloud design has been sent for judging, '
+        + 'and your CSS is now locked.'
+      : 'Your challenge has ended and your CSS has been locked. You did not complete '
+        + 'all ' + total + ' objectives, so this submission is not eligible for the '
+        + 'final design competition.';
+    el.modalObjectives.textContent = score + ' / ' + total;
+    el.modalStatus.textContent = eligible ? 'SUBMITTED' : 'EXPIRED';
+    el.modalEligible.textContent = eligible ? 'YES' : 'NO';
+    el.modalHints.textContent = data.hintsUsed || 0;
     el.modal.hidden = false;
-    el.modalClose.focus();
+    el.myDesign.focus();
   }
 
-  // -------------------------------------------------------- final preview --
+  // ------------------------------------------------------- final previews --
 
   /*
-   * The finished page, for comparison. Purely informational: it never reads
-   * the player's stylesheet, never posts anything, and never touches the
-   * clock or the objectives. The document comes from the server by URL and
-   * lands in its own `sandbox`ed iframe, so the gold-standard CSS is scoped
-   * to that document and cannot style the arena around it.
+   * Two different things, deliberately kept apart:
+   *   reference -- the official finished NovaCloud (markup + solution.css)
+   *   mine      -- the player's own submitted entry (markup + their final CSS)
+   * Both are composed server-side and loaded by URL into a sandboxed iframe,
+   * so neither stylesheet can reach the game shell.
    */
-  var finalLoaded = false;
-
-  function openFinal() {
-    if (!finalLoaded) {
-      el.finalFrame.src = urls.finalPreview;
-      finalLoaded = true;
+  var VIEWS = {
+    reference: {
+      url: urls.finalPreview,
+      title: 'Final preview',
+      tag: 'the official finished NovaCloud, for reference',
+      foot: 'Reference only — nothing here is graded, and your clock keeps running. '
+        + 'Compare it with your preview, then fix style.css.'
+    },
+    mine: {
+      url: urls.finalDesign,
+      title: 'My final design',
+      tag: 'your submitted competition entry',
+      foot: 'This is the design captured when your time ran out. It is what the '
+        + 'judges will see.'
     }
+  };
+
+  var finalKind = null;
+
+  function openFinal(kind) {
+    var view = VIEWS[kind];
+    if (finalKind !== kind) {
+      el.finalFrame.src = view.url;
+      finalKind = kind;
+    }
+    el.finalTitle.textContent = view.title;
+    el.finalTag.textContent = view.tag;
+    el.finalFoot.textContent = view.foot;
     el.final.hidden = false;
     fitFinal();
     el.finalClose.focus();
@@ -348,25 +403,8 @@
 
   function closeFinal() {
     el.final.hidden = true;
-    el.finalOpen.focus();
+    (locked ? el.myDesign : el.finalOpen).focus();
   }
-
-  el.finalOpen.addEventListener('click', openFinal);
-  el.finalClose.addEventListener('click', closeFinal);
-
-  el.final.addEventListener('click', function (event) {
-    if (event.target === el.final) { closeFinal(); }  // click the backdrop
-  });
-
-  Array.prototype.forEach.call(document.querySelectorAll('[data-final-width]'), function (button) {
-    button.addEventListener('click', function () {
-      Array.prototype.forEach.call(document.querySelectorAll('[data-final-width]'), function (other) {
-        other.setAttribute('aria-pressed', String(other === button));
-      });
-      el.finalWrap.setAttribute('data-width', button.getAttribute('data-final-width'));
-      fitFinal();
-    });
-  });
 
   // ----------------------------------------------------------------- wire --
 
@@ -412,7 +450,15 @@
     });
   });
 
-  window.addEventListener('resize', function () { fitPreview(); fitFinal(); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-final-width]'), function (button) {
+    button.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-final-width]'), function (other) {
+        other.setAttribute('aria-pressed', String(other === button));
+      });
+      el.finalWrap.setAttribute('data-width', button.getAttribute('data-final-width'));
+      fitFinal();
+    });
+  });
 
   el.objectives.addEventListener('click', function (event) {
     var button = event.target.closest('.wf-hint-btn');
@@ -433,11 +479,18 @@
     });
   });
 
-  el.modalClose.addEventListener('click', function () { el.modal.hidden = true; });
+  el.finalOpen.addEventListener('click', function () { openFinal('reference'); });
+  el.myDesign.addEventListener('click', function () { openFinal('mine'); });
+  el.finalClose.addEventListener('click', closeFinal);
+
+  el.final.addEventListener('click', function (event) {
+    if (event.target === el.final) { closeFinal(); }  // click the backdrop
+  });
+
+  window.addEventListener('resize', function () { fitPreview(); fitFinal(); });
 
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape' && !el.final.hidden) { closeFinal(); return; }
-    if (event.key === 'Escape' && !el.modal.hidden) { el.modal.hidden = true; return; }
     if (!(event.ctrlKey || event.metaKey)) { return; }
     if (event.key === 'Enter') { event.preventDefault(); runChecks(); }
     if (event.key.toLowerCase() === 's') { event.preventDefault(); clearTimeout(saveTimer); save(); }
@@ -451,12 +504,17 @@
     cleared[item.getAttribute('data-check-id')] = true;
   });
 
+  // Hints bought earlier come back with the page, already paid for.
+  (config.revealed || []).forEach(function (entry) {
+    paintHint(entry.objective, entry.level, entry.html);
+  });
+
   renderPreview();
   fitPreview();
   paintTimer(state.remaining);
   setInterval(tick, 250);
   setInterval(syncState, timerConfig.sync * 1000);
 
-  if (state.completed) { lock('completed', state); }
-  else if (state.expired) { lock('expired', state); }
+  if (state.designMode) { showDesignMode(); }
+  if (state.expired) { lock(state); }
 }());

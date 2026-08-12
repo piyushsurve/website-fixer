@@ -5,10 +5,11 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.db import IntegrityError, transaction
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 
-from .checks import TOTAL_CHECKS, run_checks
+from .checks import HINT_LEVELS, TOTAL_CHECKS, hint_text, run_checks
 from .game_config import (
     CHALLENGE_HTML,
     DIFFICULTY,
@@ -23,7 +24,8 @@ from .game_config import (
     TIMER_SYNC_INTERVAL_SECONDS,
     TIMER_WARNING_SECONDS,
 )
-from .models import CssRule, User
+from .models import CssRule, FinalSubmission, HintReveal, User
+from .templatetags.wf_hints import code_spans
 
 # Generous ceiling; the shipped stylesheet is ~25 KB.
 MAX_SUBMISSION_CHARS = 200_000
@@ -78,15 +80,88 @@ def _record_progress(user, passed):
         user.save(update_fields=fields)
 
 
+def finalize_if_due(user):
+    """Snapshot the round the moment the server says the deadline has passed.
+
+    This runs from every authenticated entry point rather than from a
+    scheduled job, so a player whose screen nobody is watching is still
+    submitted correctly the next time anything touches their account -- and
+    `submitted_at` is the true deadline, not whenever that happened to be.
+
+    Written once. If a snapshot already exists it is returned untouched.
+    """
+    if not user.is_expired:
+        return None
+
+    existing = FinalSubmission.objects.filter(user=user).first()
+    if existing:
+        return existing
+
+    submission = _get_submission(user)
+    checks = run_checks(CHALLENGE_HTML, submission.css)
+    score = sum(1 for check in checks if check['passed'])
+    if score > user.best_score:
+        user.best_score = score
+        user.save(update_fields=['best_score'])
+
+    try:
+        with transaction.atomic():
+            return FinalSubmission.objects.create(
+                user=user,
+                pc_no=user.pc_no,
+                started_at=user.game_start_time,
+                submitted_at=user.deadline,
+                final_css=submission.css,
+                score=user.best_score,
+                total=TOTAL_CHECKS,
+                reached_all=user.design_mode,
+                design_mode=user.design_mode,
+                eligible=user.is_eligible,
+                hints_used=user.hints_used,
+                objectives_hinted=user.objectives_hinted,
+            )
+    except IntegrityError:
+        # Two requests raced across the deadline; the first one won.
+        return FinalSubmission.objects.get(user=user)
+
+
+def finalize_all_due():
+    """Settle every round whose deadline has passed but was never revisited.
+
+    A player who closes the laptop and walks away generates no further
+    requests, so `finalize_if_due` never fires for them. The admin calls this
+    when an organiser opens a participant list, which is the point at which
+    somebody actually needs the entry to exist.
+
+    Returns the number of submissions created.
+    """
+    due = User.objects.filter(
+        game_start_time__isnull=False,
+        final_submission__isnull=True,
+        game_start_time__lte=timezone.now() - timezone.timedelta(
+            seconds=GAME_DURATION_SECONDS),
+    )
+    return sum(1 for user in due if finalize_if_due(user) is not None)
+
+
 def _state(user):
+    """Authoritative round state. Every value here is computed server-side."""
+    final = finalize_if_due(user)
     return {
         'remaining': user.remaining_seconds,
         'duration': GAME_DURATION_SECONDS,
         'expired': user.is_expired,
-        'completed': user.is_completed,
+        'completed': user.design_mode,
+        'designMode': user.design_mode,
         'locked': user.is_locked,
         'score': user.best_score,
         'total': TOTAL_CHECKS,
+        'eligible': user.is_eligible,
+        'hintsUsed': user.hints_used,
+        'objectivesHinted': user.objectives_hinted,
+        'maxHints': TOTAL_CHECKS * HINT_LEVELS,
+        'submitted': final is not None,
+        'submittedAt': final.submitted_at.isoformat() if final else None,
     }
 
 
@@ -112,6 +187,7 @@ def home(request):
 
     _ensure_session(request)
     request.user.start_challenge()
+    finalize_if_due(request.user)
     submission = _get_submission(request.user)
 
     # Grade what is on disk before rendering. Autosaved work that the player
@@ -130,8 +206,16 @@ def home(request):
         'checks': checks,
         'passed': passed,
         'challenge': CHALLENGE,
+        'hint_levels': HINT_LEVELS,
         'arena': {
             'state': state,
+            # Hints already paid for, so a refresh shows them again for free.
+            'revealed': [
+                {'objective': objective, 'level': level,
+                 'html': code_spans(hint_text(objective, level) or '')}
+                for objective, level in
+                request.user.hint_reveals.values_list('objective', 'level')
+            ],
             'timer': {
                 'warning': TIMER_WARNING_SECONDS,
                 'danger': TIMER_DANGER_SECONDS,
@@ -142,10 +226,95 @@ def home(request):
                 'check': reverse('api_check'),
                 'state': reverse('api_state'),
                 'reset': reverse('api_reset'),
+                'hint': reverse('api_hint'),
                 'finalPreview': reverse('api_final_preview'),
+                'finalDesign': reverse('api_final_design'),
+                'exit': reverse('logout'),
             },
         },
     })
+
+
+def _render_novacloud(css):
+    """The challenge markup rendered with `css`, for a sandboxed iframe.
+
+    Used by both preview endpoints — the official solution and a player's own
+    submitted design — so the two render through exactly the same path and
+    differ only in which stylesheet goes in.
+
+    The site sends X-Frame-Options: DENY everywhere else; these two views are
+    relaxed to SAMEORIGIN because the arena and the admin frame them. They
+    stay un-embeddable by any other origin, and the frames carry an empty
+    `sandbox` so the CSS inside cannot reach the page around it.
+    """
+    document = _STYLESHEET_LINK.sub(
+        lambda _: '<style>' + css + '</style>', CHALLENGE_HTML, count=1,
+    )
+    response = HttpResponse(document, content_type='text/html; charset=utf-8')
+    response['Cache-Control'] = 'no-store'
+    response['X-Robots-Tag'] = 'noindex, nofollow'
+    return response
+
+
+@require_POST
+def api_hint(request):
+    """Reveal one hint, and record that it was revealed.
+
+    The count is kept here, not in the browser: a level is charged the first
+    time it is opened and never again, so re-reading a hint is free and no
+    amount of clicking (or a forged `hints_used`) can change the total.
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Not logged in'}, status=403)
+
+    user = request.user
+    if user.is_locked:
+        payload = _state(user)
+        payload['error'] = 'Time is up!'
+        return JsonResponse(payload, status=200)
+
+    objective = (request.POST.get('objective') or '').strip()
+    try:
+        level = int(request.POST.get('level') or 0)
+    except (TypeError, ValueError):
+        level = 0
+
+    text = hint_text(objective, level)
+    if text is None:
+        return JsonResponse({'error': 'No such hint'}, status=400)
+
+    _, created = HintReveal.objects.get_or_create(
+        user=user, objective=objective, level=level,
+    )
+
+    payload = _state(user)
+    payload.update({
+        'objective': objective,
+        'level': level,
+        'hint': text,
+        'hintHtml': code_spans(text),
+        'charged': created,
+    })
+    return JsonResponse(payload)
+
+
+@xframe_options_sameorigin
+def final_design(request):
+    """Render the player's own submitted design: the markup + *their* CSS.
+
+    Distinct from `final_preview`, which renders the official solution. This
+    one is what the judges look at, and it only exists once the round has
+    been submitted.
+    """
+    if not request.user.is_authenticated:
+        return redirect('login')
+
+    finalize_if_due(request.user)
+    final = FinalSubmission.objects.filter(user=request.user).first()
+    if not final:
+        return redirect('home')
+
+    return _render_novacloud(final.final_css)
 
 
 @xframe_options_sameorigin
@@ -163,16 +332,7 @@ def final_preview(request):
     if not request.user.is_authenticated:
         return redirect('login')
 
-    document = _STYLESHEET_LINK.sub(
-        lambda _: '<style>' + SOLUTION_CSS + '</style>', CHALLENGE_HTML, count=1,
-    )
-    # The site sends X-Frame-Options: DENY everywhere else. This one view is
-    # relaxed to SAMEORIGIN because the arena frames it; it stays un-embeddable
-    # by any other origin, and the frame itself carries an empty `sandbox`.
-    response = HttpResponse(document, content_type='text/html; charset=utf-8')
-    response['Cache-Control'] = 'no-store'
-    response['X-Robots-Tag'] = 'noindex, nofollow'
-    return response
+    return _render_novacloud(SOLUTION_CSS)
 
 
 # ----------------------------------------------------------------- auth ----

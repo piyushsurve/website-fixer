@@ -603,3 +603,61 @@ body.wf-body--arena { overflow: hidden; }
   .wf-final__box { height: 92vh; }
   .wf-final__tag { display: none; }
 }
+
+/* ---------- hint counter, design mode, end-of-round card --------------- */
+
+.wf-hintcount {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 13px;
+  border: 1px solid var(--wf-line);
+  border-radius: 999px;
+  background: var(--wf-bg-soft);
+  font-size: 13px;
+  color: var(--wf-muted);
+  white-space: nowrap;
+}
+
+.wf-hintcount__label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wf-dim);
+  font-weight: 700;
+}
+
+.wf-hintcount__value {
+  font-family: var(--wf-mono);
+  font-weight: 700;
+  color: var(--wf-yellow);
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-design {
+  margin: 0;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--wf-line-soft);
+  border-left: 3px solid var(--wf-green);
+  background: var(--wf-ok-soft);
+  color: var(--wf-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.wf-design[hidden] { display: none; }
+.wf-design b { color: #8fe3b8; }
+
+.wf-modal__headline,
+.wf-modal__score {
+  position: relative;
+  margin: 0 0 10px;
+  font-family: var(--wf-mono);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--wf-text);
+}
+
+@media (max-width: 1280px) {
+  .wf-hintcount__label { display: none; }
+}

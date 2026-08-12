@@ -33,6 +33,11 @@
       </span>
     </div>
 
+    <div class="wf-hintcount" title="Hints revealed (recorded for judging)">
+      <span class="wf-hintcount__label">Hints</span>
+      <span class="wf-hintcount__value" id="wf-hint-count">{{ state.hintsUsed }}</span>
+    </div>
+
     <div class="wf-presence" data-presence data-state="connecting" title="Players connected right now">
       <span class="wf-presence__dot" aria-hidden="true"></span>
       <span class="wf-presence__count" data-presence-count>–</span>
@@ -115,7 +120,13 @@
           <span class="wf-panel__hint">{{ state.total }} CSS fixes</span>
         </div>
 
-        <p class="wf-mission">
+        <p class="wf-design" id="wf-design-banner" hidden>
+          <b>Design mode unlocked.</b> Every objective is clear — now make
+          {{ challenge.site }} your own. Change colours, type, spacing, anything you
+          like; whatever style.css holds at 00:00 is your competition entry.
+        </p>
+
+        <p class="wf-mission" id="wf-mission">
           <b>Your mission:</b> the {{ challenge.site }} markup is finished and locked.
           Only <b>style.css</b> is broken. Repair it before the clock hits zero —
           other things in the stylesheet are untidy, but only the
@@ -135,19 +146,16 @@
 
                 <p class="wf-objective__desc">{{ check.description }}</p>
 
-                <div class="wf-objective__hints">
-                  {% for hint in check.hints %}
-                    <p class="wf-objective__hint" data-hint-level="{{ forloop.counter }}" hidden>
-                      <b>Hint {{ forloop.counter }} ·
-                        {% if forloop.counter == 1 %}the idea
-                        {% elif forloop.counter == 2 %}where to look
-                        {% else %}which property{% endif %}</b>{{ hint|code_spans }}
-                    </p>
-                  {% endfor %}
-                </div>
+                <!--
+                  Hints are NOT rendered here. Each one is fetched from
+                  /api/hint/ when the player asks for it, so the count is
+                  recorded server-side and the text is not sitting in the
+                  page source waiting to be read for free.
+                -->
+                <div class="wf-objective__hints" data-hints-for="{{ check.id }}"></div>
 
                 <button type="button" class="wf-hint-btn" data-hint-for="{{ check.id }}">
-                  Show hint 1 of {{ check.hints|length }}
+                  Show hint 1 of {{ hint_levels }}
                 </button>
               </div>
             </li>
@@ -171,7 +179,7 @@
   <div class="wf-final__box">
     <div class="wf-final__bar">
       <span class="wf-final__title" id="wf-final-title">Final preview</span>
-      <span class="wf-final__tag">how {{ challenge.site }} should look when it is fixed</span>
+      <span class="wf-final__tag" id="wf-final-tag">how {{ challenge.site }} should look when it is fixed</span>
       <span class="wf-panel__spacer"></span>
 
       <div class="wf-widths" role="group" aria-label="Final preview width">
@@ -186,7 +194,7 @@
       <iframe id="wf-final-frame" class="wf-preview" title="The finished NovaCloud page" sandbox></iframe>
     </div>
 
-    <p class="wf-final__foot">
+    <p class="wf-final__foot" id="wf-final-foot">
       Reference only — nothing here is graded, and your clock keeps running.
       Compare it with your preview, then fix <b>style.css</b>.
     </p>
@@ -195,20 +203,21 @@
 
 <div class="wf-modal" id="wf-modal" hidden role="dialog" aria-modal="true" aria-labelledby="wf-modal-title">
   <div class="wf-card wf-modal__box" id="wf-modal-box" data-outcome="win">
-    <div class="wf-modal__icon" id="wf-modal-icon">🏆</div>
-    <h2 class="wf-modal__title" id="wf-modal-title">Website fixed!</h2>
+    <div class="wf-modal__icon" id="wf-modal-icon">🏁</div>
+    <h2 class="wf-modal__title" id="wf-modal-title">Time's up</h2>
+    <p class="wf-modal__score" id="wf-modal-headline"></p>
     <p class="wf-modal__text" id="wf-modal-text"></p>
 
     <dl class="wf-modal__grid">
       <div><dt>Objectives</dt><dd id="wf-modal-objectives">–</dd></div>
-      <div><dt id="wf-modal-timelabel">Time remaining</dt><dd id="wf-modal-time">–</dd></div>
-      <div><dt>Round</dt><dd>{{ challenge.round }}</dd></div>
       <div><dt>Status</dt><dd id="wf-modal-status">–</dd></div>
+      <div><dt>Eligible</dt><dd id="wf-modal-eligible">–</dd></div>
+      <div><dt>Hints used</dt><dd id="wf-modal-hints">–</dd></div>
     </dl>
 
     <div class="wf-modal__actions">
-      <button type="button" class="wf-btn" id="wf-modal-close">Review my code</button>
-      <a class="wf-btn wf-btn--primary" href="/">Back to home</a>
+      <button type="button" class="wf-btn wf-btn--primary" id="wf-my-design">View my final design</button>
+      <a class="wf-btn" href="{% url 'logout' %}" id="wf-exit">Exit</a>
     </div>
   </div>
 </div>

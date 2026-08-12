@@ -25,6 +25,12 @@ urlpatterns = [
     path('api/check/', views.api_check, name='api_check'),
     path('api/reset/', views.api_reset, name='api_reset'),
 
-    # Visual reference only: the finished page, never graded.
+    # Hints are charged and recorded server-side.
+    path('api/hint/', views.api_hint, name='api_hint'),
+
+    # Visual reference only: the official finished page, never graded.
     path('api/final-preview/', views.final_preview, name='api_final_preview'),
+
+    # The player's own submitted design, once the round has closed.
+    path('api/final-design/', views.final_design, name='api_final_design'),
 ]

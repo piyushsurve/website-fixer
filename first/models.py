@@ -30,9 +30,15 @@ class User(AbstractBaseUser):
     is_active = models.BooleanField(default=True)
     is_admin = models.BooleanField(default=False)
 
+    registered_at = models.DateTimeField(auto_now_add=True, null=True)
+
     # The challenge clock. Set when the player first opens the arena and
     # never reset by a refresh -- this is the authoritative timer source.
     game_start_time = models.DateTimeField(null=True, blank=True)
+
+    # When the player first cleared all 14 objectives. This unlocks Design
+    # Mode and is what makes their entry eligible for judging; it does NOT
+    # end the round, which runs until the deadline either way.
     completed_at = models.DateTimeField(null=True, blank=True)
     best_score = models.PositiveSmallIntegerField(default=0)
 
@@ -42,7 +48,19 @@ class User(AbstractBaseUser):
     REQUIRED_FIELDS = ["username"]
 
     def __str__(self):
-        return self.username
+        return f"{self.pc_no} ({self.username})"
+
+    # -- django admin ------------------------------------------------------
+
+    @property
+    def is_staff(self):
+        return self.is_admin
+
+    def has_perm(self, perm, obj=None):
+        return self.is_admin
+
+    def has_module_perms(self, app_label):
+        return self.is_admin
 
     # -- challenge clock ---------------------------------------------------
 
@@ -51,6 +69,13 @@ class User(AbstractBaseUser):
         if not self.game_start_time:
             self.game_start_time = timezone.now()
             self.save(update_fields=["game_start_time"])
+
+    @property
+    def deadline(self):
+        """The exact moment this player's round ends, or None before it starts."""
+        if not self.game_start_time:
+            return None
+        return self.game_start_time + timezone.timedelta(seconds=GAME_DURATION_SECONDS)
 
     @property
     def remaining_seconds(self):
@@ -64,16 +89,40 @@ class User(AbstractBaseUser):
         return self.game_start_time is not None and self.remaining_seconds <= 0
 
     @property
-    def is_completed(self):
+    def design_mode(self):
+        """True once every objective has been cleared: phase 2 is open."""
         return self.completed_at is not None
+
+    # Kept for readability at call sites that ask "did they clear all 14?"
+    is_completed = design_mode
+
+    @property
+    def is_eligible(self):
+        """Only a player who reached 14/14 before the deadline is judged."""
+        return self.design_mode
 
     @property
     def is_locked(self):
-        """No further edits accepted: either finished or out of time."""
-        return self.is_completed or self.is_expired
+        """No further edits accepted.
+
+        Reaching 14/14 no longer ends the round -- it opens Design Mode, and
+        the player keeps editing until the clock runs out. Only the deadline
+        locks the stylesheet.
+        """
+        return self.is_expired
+
+    # -- hints -------------------------------------------------------------
+
+    @property
+    def hints_used(self):
+        return self.hint_reveals.count()
+
+    @property
+    def objectives_hinted(self):
+        return self.hint_reveals.values('objective').distinct().count()
 
 
-# The player's saved submission (one row per player).
+# The player's live, editable stylesheet (one row per player).
 class CssRule(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="css_rules")
     html = models.TextField(blank=True, default="")
@@ -81,4 +130,83 @@ class CssRule(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Submission for {self.user.username}"
+        return f"Working stylesheet for {self.user.pc_no}"
+
+
+class HintReveal(models.Model):
+    """One row the first time a player reveals a given hint level.
+
+    The unique constraint is what makes the count honest: clicking the same
+    hint again is a no-op, so a total cannot be inflated by re-reading.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="hint_reveals")
+    objective = models.CharField(max_length=64)
+    level = models.PositiveSmallIntegerField()
+    revealed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "objective", "level")
+        ordering = ("revealed_at", "id")
+
+    def __str__(self):
+        return f"{self.user.pc_no} · {self.objective} · hint {self.level}"
+
+
+class FinalSubmission(models.Model):
+    """The immutable snapshot taken when a player's deadline passes.
+
+    Written once, by the server, from whatever the player's stylesheet held at
+    the deadline. `final_css` is the competition entry and is never rewritten;
+    `save()` refuses to change it once the row exists.
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="final_submission")
+
+    pc_no = models.CharField(max_length=50)
+    started_at = models.DateTimeField(null=True, blank=True)
+    submitted_at = models.DateTimeField()
+
+    final_css = models.TextField()
+
+    score = models.PositiveSmallIntegerField(default=0)
+    total = models.PositiveSmallIntegerField(default=0)
+    reached_all = models.BooleanField(default=False)
+    design_mode = models.BooleanField(default=False)
+    eligible = models.BooleanField(default=False)
+
+    hints_used = models.PositiveSmallIntegerField(default=0)
+    objectives_hinted = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ("-submitted_at",)
+        verbose_name = "final submission"
+        verbose_name_plural = "final submissions"
+
+    def __str__(self):
+        return f"{self.pc_no} — {self.score}/{self.total}"
+
+    @property
+    def status(self):
+        return "Submitted" if self.eligible else "Expired"
+
+    def save(self, *args, **kwargs):
+        """Allow the first write; refuse any later change to the entry itself."""
+        if self.pk:
+            stored = type(self).objects.filter(pk=self.pk).values(
+                'final_css', 'score', 'eligible', 'submitted_at',
+            ).first()
+            if stored:
+                frozen = {
+                    'final_css': self.final_css,
+                    'score': self.score,
+                    'eligible': self.eligible,
+                    'submitted_at': self.submitted_at,
+                }
+                changed = [k for k, v in frozen.items() if stored[k] != v]
+                if changed:
+                    raise ValueError(
+                        'FinalSubmission is immutable; refusing to change '
+                        + ', '.join(sorted(changed))
+                    )
+        return super().save(*args, **kwargs)

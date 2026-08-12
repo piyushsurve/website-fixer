@@ -667,3 +667,27 @@ def run_checks(html, css):
             'passed': passed,
         })
     return results
+
+
+# --------------------------------------------------------------------------
+# Lookups for the hint API
+# --------------------------------------------------------------------------
+
+HINT_LEVELS = 3
+
+OBJECTIVE_TITLES = {cid: title for cid, _g, title, _d, _h, _f in _DEFINITIONS}
+OBJECTIVE_IDS = tuple(OBJECTIVE_TITLES)
+
+_HINTS = {cid: hints for cid, _g, _t, _d, hints, _f in _DEFINITIONS}
+
+
+def hint_text(objective, level):
+    """The text of one hint, or None if the objective/level is not real.
+
+    Levels are 1-based. Anything the client sends is validated here, so a
+    forged objective id or level cannot reach the database.
+    """
+    hints = _HINTS.get(objective)
+    if not hints or not isinstance(level, int) or not 1 <= level <= len(hints):
+        return None
+    return hints[level - 1]

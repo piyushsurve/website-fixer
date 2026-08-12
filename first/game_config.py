@@ -5,18 +5,17 @@ Everything the game needs to know about "what the player is fixing" and
 "how long they get" lives here, so views, checks and templates never
 hardcode duplicate copies of it.
 
-The challenge itself is *not* written in this file. Round 01 ships as four
-plain files under ``first/challenge/novacloud/``:
+Round 01 is a **CSS-only** challenge. The challenge itself is not written in
+this file; it ships as three plain files under ``first/challenge/novacloud/``:
 
-    index.html      the broken page handed to the player
-    style.css       the broken stylesheet handed to the player
-    solution.html   the page with every objective fixed
-    solution.css    the organisers' gold standard
+    index.html      the finished page -- READ ONLY, never edited or submitted
+    style.css       the broken stylesheet the player repairs
+    solution.css    the organisers' gold standard, never sent to a browser
 
-`style.css` ships 39 deliberate defects; 14 of them are graded objectives.
-The rest are visual noise the player may fix or ignore -- `GRADED_FIXES`
-below is the authoritative list of what is scored, and `checks.py` grades
-the *outcome* of each one rather than matching this text.
+`style.css` carries 37 deliberate defects; 14 of them are graded objectives.
+The rest are cosmetic noise the player may fix or ignore. `GRADED_FIXES`
+below is the authoritative list of what is scored, and `checks.py` grades the
+*outcome* of each objective rather than matching this text.
 """
 
 from pathlib import Path
@@ -38,6 +37,7 @@ ROUND_NUMBER = '01'
 SITE_NAME = 'NovaCloud'
 SITE_TAGLINE = 'AI-powered cloud platform landing page'
 DIFFICULTY = 'Basic'
+MODE = 'CSS debugging'
 
 CHALLENGE_DIR = Path(__file__).resolve().parent / 'challenge' / 'novacloud'
 
@@ -46,29 +46,27 @@ def _read(name):
     return (CHALLENGE_DIR / name).read_text(encoding='utf-8')
 
 
-# The broken page the player has to repair. Unlike earlier rounds this is a
-# complete HTML document -- the preview renders it as-is, swapping the
-# stylesheet link for the player's live CSS.
-STARTER_HTML = _read('index.html')
-STARTER_CSS = _read('style.css')
+# The finished markup. It is shown read-only, is never accepted from the
+# browser, and is what every submission is graded against.
+CHALLENGE_HTML = _read('index.html')
 
-# The intended result. Used by the tests (and by organisers) to prove the
-# challenge is solvable; never sent to the browser.
-SOLUTION_HTML = _read('solution.html')
+# The broken stylesheet the player repairs, and the intended result.
+STARTER_CSS = _read('style.css')
 SOLUTION_CSS = _read('solution.css')
 
 
 # ----------------------------------------------------------------- fixes ----
 #
-# objective id -> the (broken, fixed) edits that clear it. Grouped edits
-# count as one objective: repairing the feature card means fixing both its
-# padding and its corner radius, and the stats band needs all four numbers.
+# objective id -> the (broken, fixed) edits that clear it. Grouped edits count
+# as one objective: the stats band needs its column count and its alignment,
+# the steps row needs its column count and its padding, the pricing row needs
+# its gap and the size of the featured card.
 #
 # These are the *reference* answers. The checker accepts any equivalent
-# result, so this table is for the tests and for organisers -- not a
-# string comparison the player has to match.
+# result, so this table exists for the tests and for organisers -- it is not
+# a string comparison the player has to match.
 
-GRADED_CSS_FIXES = {
+GRADED_FIXES = {
     'css-line-height': (
         ('  line-height: 1;\n  -webkit-font-smoothing',
          '  line-height: 1.6;\n  -webkit-font-smoothing'),
@@ -96,6 +94,11 @@ GRADED_CSS_FIXES = {
         ('  overflow: hidden;\n  transform: rotate(45deg);',
          '  overflow: hidden;\n  transform: rotate(1.2deg);'),
     ),
+    'css-stats-band': (
+        ('.stats__grid {\n  display: grid;\n  grid-template-columns: repeat(2, 1fr);',
+         '.stats__grid {\n  display: grid;\n  grid-template-columns: repeat(4, 1fr);'),
+        ('.stat-card {\n  text-align: left;', '.stat-card {\n  text-align: center;'),
+    ),
     'css-features': (
         ('.features__grid {\n  display: grid;\n  grid-template-columns: repeat(1, 1fr);',
          '.features__grid {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);'),
@@ -104,46 +107,26 @@ GRADED_CSS_FIXES = {
         ('  border-radius: 0;\n  padding: 4px;\n  transition: transform',
          '  border-radius: var(--radius-md);\n  padding: 32px;\n  transition: transform'),
     ),
+    'css-feature-icon': (
+        ('  width: 180px;\n  height: 48px;\n  border-radius: var(--radius-sm);',
+         '  width: 48px;\n  height: 48px;\n  border-radius: var(--radius-sm);'),
+    ),
+    'css-steps': (
+        ('.steps {\n  display: grid;\n  grid-template-columns: repeat(4, 1fr);',
+         '.steps {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);'),
+        ('.step {\n  position: relative;\n  padding: 0;',
+         '.step {\n  position: relative;\n  padding: 32px 28px;'),
+    ),
+    'css-pricing': (
+        ('  grid-template-columns: repeat(3, 1fr);\n  gap: 0px;\n  align-items: stretch;',
+         '  grid-template-columns: repeat(3, 1fr);\n  gap: 28px;\n  align-items: stretch;'),
+        ('  border-color: transparent;\n  transform: scale(0.85);',
+         '  border-color: transparent;\n  transform: scale(1.04);'),
+    ),
     'css-responsive': (
         ('@media (min-width: 860px) {', '@media (max-width: 860px) {'),
     ),
 }
-
-GRADED_HTML_FIXES = {
-    'html-h1': (
-        ('          <h2 class="hero__title">\n'
-         '            Ship infrastructure at the\n'
-         '            <span class="hero__title-accent">speed of thought</span>\n'
-         '          </h2>',
-         '          <h1 class="hero__title">\n'
-         '            Ship infrastructure at the\n'
-         '            <span class="hero__title-accent">speed of thought</span>\n'
-         '          </h1>'),
-    ),
-    'html-nav-link': (
-        ('        <li><a href="#testimonials" class="navbar__link">Testimonials</a></li>\n      </ul>',
-         '        <li><a href="#testimonials" class="navbar__link">Testimonials</a></li>\n'
-         '        <li><a href="#faq" class="navbar__link">FAQ</a></li>\n      </ul>'),
-    ),
-    'html-feature-card': (
-        ('          <article>\n'
-         '            <div class="feature-card__icon" aria-hidden="true">\n'
-         '              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\n'
-         '                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>',
-         '          <article class="feature-card">\n'
-         '            <div class="feature-card__icon" aria-hidden="true">\n'
-         '              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\n'
-         '                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>'),
-    ),
-    'html-stats': (
-        ('data-count-to="12000">0<', 'data-count-to="12000">12,000<'),
-        ('data-count-to="99">0<', 'data-count-to="99">99<'),
-        ('data-count-to="14">0<', 'data-count-to="14">14<'),
-        ('data-count-to="6">0<', 'data-count-to="6">6<'),
-    ),
-}
-
-GRADED_FIXES = {**GRADED_CSS_FIXES, **GRADED_HTML_FIXES}
 
 
 def apply_fixes(source, fixes):

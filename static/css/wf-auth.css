@@ -5,11 +5,7 @@
   display: grid;
   place-items: center;
   padding: 32px 20px;
-  background:
-    radial-gradient(760px 360px at 18% -5%, rgba(124, 58, 237, 0.28), transparent 62%),
-    radial-gradient(660px 320px at 88% 105%, rgba(6, 182, 212, 0.20), transparent 62%),
-    radial-gradient(520px 260px at 70% 20%, rgba(244, 114, 182, 0.12), transparent 62%),
-    var(--wf-bg);
+  background: var(--wf-bg);
 }
 
 .wf-auth__card { width: min(440px, 100%); padding: 30px; }
@@ -35,7 +31,7 @@
   padding: 11px 14px;
   border: 1px solid var(--wf-line);
   border-radius: var(--wf-radius-sm);
-  background: #0b0c1e;
+  background: #131426;
   color: var(--wf-text);
   font-family: var(--wf-mono);
   font-size: 14px;
@@ -43,7 +39,7 @@
 }
 
 .wf-input::placeholder { color: #5b60a0; }
-.wf-input:focus { outline: none; border-color: var(--wf-cyan); box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.22); }
+.wf-input:focus { outline: none; border-color: var(--wf-primary); box-shadow: 0 0 0 3px var(--wf-accent-soft); }
 
 .wf-error {
   margin-bottom: 16px;
@@ -56,7 +52,7 @@
 }
 
 .wf-auth__foot { margin-top: 18px; text-align: center; font-size: 13px; color: var(--wf-dim); }
-.wf-auth__foot a { color: var(--wf-cyan); text-decoration: none; font-weight: 700; }
+.wf-auth__foot a { color: var(--wf-primary); text-decoration: none; font-weight: 600; }
 .wf-auth__foot a:hover { text-decoration: underline; }
 
 /* ---------- launch screen ---------- */
@@ -68,7 +64,7 @@
 .wf-launch__title {
   margin: 0 0 8px;
   font-size: clamp(26px, 4vw, 38px);
-  font-weight: 900;
+  font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.03em;
 }
@@ -88,7 +84,7 @@
 .wf-launch__fill {
   height: 100%;
   width: 0;
-  background: var(--wf-grad);
+  background: var(--wf-primary);
   transition: width 0.12s linear;
 }
 

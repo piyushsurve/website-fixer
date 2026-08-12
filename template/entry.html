@@ -17,7 +17,7 @@
       <span class="wf-arena__brandtext">Website Fixer</span>
     </a>
 
-    <span class="wf-arena__round">Round {{ challenge.round }} · {{ challenge.site }}</span>
+    <span class="wf-chip">Round {{ challenge.round }} · {{ challenge.site }}</span>
 
     <span class="wf-arena__spacer"></span>
 
@@ -50,25 +50,36 @@
     <!-- editor -->
     <section class="wf-panel wf-panel--editor">
       <div class="wf-panel__head">
-        <div class="wf-tabs" role="tablist" aria-label="Code editor">
-          <button type="button" class="wf-tab" data-tab="html" role="tab" aria-selected="true">index.html</button>
-          <button type="button" class="wf-tab" data-tab="css" role="tab" aria-selected="false">style.css</button>
+        <div class="wf-tabs" role="tablist" aria-label="Code">
+          <button type="button" class="wf-tab" data-tab="css" role="tab" aria-selected="true">
+            style.css
+          </button>
+          <button type="button" class="wf-tab" data-tab="html" role="tab" aria-selected="false">
+            index.html <span class="wf-tab__lock">read only</span>
+          </button>
         </div>
         <span class="wf-panel__spacer"></span>
-        <span class="wf-panel__hint">Tab = 2 spaces · Ctrl+Enter = run checks</span>
+        <span class="wf-panel__hint" id="wf-editor-hint">Tab = 2 spaces · Ctrl+Enter = run checks</span>
       </div>
 
       <div class="wf-editor">
-        <textarea id="wf-html" class="wf-editor__area" spellcheck="false" autocomplete="off"
-                  aria-label="HTML editor">{{ html }}</textarea>
         <textarea id="wf-css" class="wf-editor__area" spellcheck="false" autocomplete="off"
-                  aria-label="CSS editor" hidden>{{ css }}</textarea>
+                  aria-label="CSS editor">{{ css }}</textarea>
+
+        <!--
+          The markup is fixed for Round 01. It is shown so the player can read
+          the structure and work out which selectors apply; it is `readonly`
+          here and the server ignores any `html` field that is posted back.
+        -->
+        <textarea id="wf-html" class="wf-editor__area wf-editor__area--locked" spellcheck="false"
+                  autocomplete="off" readonly aria-label="HTML, read only"
+                  aria-readonly="true" hidden>{{ html }}</textarea>
       </div>
 
       <div class="wf-editor__foot">
         <span class="wf-save" id="wf-save-state" data-state="saved">saved</span>
         <span class="wf-panel__spacer"></span>
-        <button type="button" class="wf-btn wf-btn--ghost" id="wf-reset">Reset page</button>
+        <button type="button" class="wf-btn wf-btn--ghost wf-btn--sm" id="wf-reset">Reset CSS</button>
       </div>
     </section>
 
@@ -82,7 +93,7 @@
             <button type="button" class="wf-width" data-width="full" aria-pressed="true">Desktop</button>
             <button type="button" class="wf-width" data-width="phone" aria-pressed="false">Phone</button>
           </div>
-          <span class="wf-panel__hint">sandboxed · scripts off</span>
+          <span class="wf-panel__hint">sandboxed</span>
         </div>
         <!--
           The player's page is rendered here and nowhere else. `sandbox` with no
@@ -91,34 +102,33 @@
           game shell -- and the game shell's CSS never reaches their page.
         -->
         <div class="wf-preview-wrap" id="wf-preview-wrap" data-width="full">
-          <iframe id="wf-preview" class="wf-preview" title="Preview of your website" sandbox></iframe>
+          <iframe id="wf-preview" class="wf-preview" title="Preview of the NovaCloud page" sandbox></iframe>
         </div>
       </section>
 
       <section class="wf-panel">
         <div class="wf-panel__head">
-          <span class="wf-panel__title">Mission objectives</span>
+          <span class="wf-panel__title">Objectives</span>
           <span class="wf-panel__spacer"></span>
-          <span class="wf-panel__hint">{{ state.total }} fixes</span>
+          <span class="wf-panel__hint">{{ state.total }} CSS fixes</span>
         </div>
 
         <p class="wf-mission">
-          <b>Your mission:</b> restore the broken {{ challenge.site }} landing page. The HTML and
-          CSS are already written — find the problems, fix them, and clear every objective
-          before the clock hits zero. Plenty else in the stylesheet is ugly;
-          <b>only the {{ state.total }} objectives below are scored.</b>
+          <b>Your mission:</b> the {{ challenge.site }} markup is finished and locked.
+          Only <b>style.css</b> is broken. Repair it before the clock hits zero —
+          other things in the stylesheet are untidy, but only the
+          {{ state.total }} objectives below are scored.
         </p>
 
         <ul class="wf-objectives" id="wf-objectives">
           {% for check in checks %}
             <li class="wf-objective{% if check.passed %} is-done{% endif %}"
-                data-check-id="{{ check.id }}" data-group="{{ check.group }}">
+                data-check-id="{{ check.id }}">
               <span class="wf-objective__mark">{% if check.passed %}✓{% endif %}</span>
 
               <div class="wf-objective__body">
                 <div class="wf-objective__head">
                   <span class="wf-objective__title">{{ check.title }}</span>
-                  <span class="wf-objective__tag">{{ check.group }}</span>
                 </div>
 
                 <p class="wf-objective__desc">{{ check.description }}</p>
@@ -145,8 +155,6 @@
 
 <div class="wf-modal" id="wf-modal" hidden role="dialog" aria-modal="true" aria-labelledby="wf-modal-title">
   <div class="wf-card wf-modal__box" id="wf-modal-box" data-outcome="win">
-    <div class="wf-modal__burst" aria-hidden="true"></div>
-
     <div class="wf-modal__icon" id="wf-modal-icon">🏆</div>
     <h2 class="wf-modal__title" id="wf-modal-title">Website fixed!</h2>
     <p class="wf-modal__text" id="wf-modal-text"></p>

@@ -1,6 +1,9 @@
 /*
  * Challenge arena controller: editor, sandboxed preview, countdown, checks.
  *
+ * Round 01 is CSS only. `#wf-html` is a readonly view of the fixed markup --
+ * it is never bound to the editor handlers and never posted to the server.
+ *
  * The countdown rendered here is only a display. `remaining` always comes
  * from the server (page load + periodic /api/state/ sync), and the server
  * refuses saves and checks once the session is over, so editing the numbers
@@ -33,6 +36,7 @@
     run: document.getElementById('wf-run'),
     reset: document.getElementById('wf-reset'),
     saveState: document.getElementById('wf-save-state'),
+    editorHint: document.getElementById('wf-editor-hint'),
     objectives: document.getElementById('wf-objectives'),
     modal: document.getElementById('wf-modal'),
     modalBox: document.getElementById('wf-modal-box'),
@@ -71,7 +75,7 @@
   }
 
   function submission() {
-    return { html: el.html.value, css: el.css.value };
+    return { css: el.css.value };
   }
 
   function pad(value) { return value < 10 ? '0' + value : String(value); }
@@ -267,7 +271,6 @@
     if (locked) { return; }
     locked = true;
     clearTimeout(saveTimer);
-    el.html.disabled = true;
     el.css.disabled = true;
     el.run.disabled = true;
     el.reset.disabled = true;
@@ -286,7 +289,6 @@
         time: clock(Math.max(0, lastRemaining)),
         status: 'PASSED'
       });
-      confetti();
     } else {
       paintTimer(0);
       showModal({
@@ -315,23 +317,6 @@
     el.modalClose.focus();
   }
 
-  function confetti() {
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
-    var colors = ['#7c3aed', '#3b82f6', '#06b6d4', '#f472b6', '#facc15', '#22c55e'];
-    var layer = document.createElement('div');
-    layer.className = 'wf-confetti';
-    for (var i = 0; i < 70; i++) {
-      var piece = document.createElement('i');
-      piece.style.left = Math.random() * 100 + '%';
-      piece.style.background = colors[i % colors.length];
-      piece.style.animationDuration = (2.2 + Math.random() * 1.8) + 's';
-      piece.style.animationDelay = (Math.random() * 0.7) + 's';
-      layer.appendChild(piece);
-    }
-    document.body.appendChild(layer);
-    setTimeout(function () { layer.remove(); }, 5200);
-  }
-
   // ----------------------------------------------------------------- wire --
 
   function bindEditor(area) {
@@ -348,8 +333,7 @@
     });
   }
 
-  bindEditor(el.html);
-  bindEditor(el.css);
+  bindEditor(el.css);  // the HTML pane is readonly and stays unbound
 
   Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (tab) {
     tab.addEventListener('click', function () {
@@ -359,6 +343,9 @@
       });
       el.html.hidden = target !== 'html';
       el.css.hidden = target !== 'css';
+      el.editorHint.textContent = target === 'html'
+        ? 'index.html is fixed for this round — read it, do not edit it'
+        : 'Tab = 2 spaces · Ctrl+Enter = run checks';
       (target === 'html' ? el.html : el.css).focus();
     });
   });
@@ -384,13 +371,12 @@
   el.run.addEventListener('click', runChecks);
 
   el.reset.addEventListener('click', function () {
-    if (locked || !window.confirm('Restore the original broken page? Your edits will be lost.')) { return; }
+    if (locked || !window.confirm('Restore the original broken style.css? Your edits will be lost.')) { return; }
     post(urls.reset, {}).then(function (data) {
-      if (data.html !== undefined) {
-        el.html.value = data.html;
+      if (data.css !== undefined) {
         el.css.value = data.css;
         renderPreview();
-        setSaveState('saved', 'reset to the broken version');
+        setSaveState('saved', 'reset to the broken stylesheet');
       }
       applyState(data);
     });

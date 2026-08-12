@@ -1,13 +1,13 @@
 # Website Fixer
 
-A timed HTML/CSS **repair** game. Round 01 hands the player a finished
-cloud-platform landing page ("NovaCloud") that shipped broken, and gives them
-**30 minutes** to clear **14 objectives** by fixing the existing HTML and CSS
-in the browser.
+A timed **CSS debugging** game. Round 01 hands the player a finished
+cloud-platform landing page ("NovaCloud") whose stylesheet shipped broken, and
+gives them **30 minutes** to clear **14 CSS objectives**.
 
-Nobody builds NovaCloud. The markup, the copy, the sections and the design
-system are all already there; ten CSS declarations and four bits of markup are
-wrong, and every one of them is visible in the live preview.
+Nobody builds NovaCloud, and nobody edits its markup. `index.html` is
+**read-only** — shown so the player can read the structure and work out which
+selectors apply, never editable, and never accepted from the browser. The only
+editable file is `style.css`.
 
 Django 5 + Django Channels (ASGI). No frontend framework.
 
@@ -53,13 +53,12 @@ daphne -b 127.0.0.1 -p 8000 games.asgi:application
 Flow: `/` (home) → `/signup/` or `/login/` → `/start/` (launch screen) →
 `/home/` (arena) → success or timeout.
 
-### The challenge is four files
+### The challenge is three files
 
 ```
 first/challenge/novacloud/
-  index.html      the broken page handed to the player
-  style.css       the broken stylesheet handed to the player
-  solution.html   the page with every objective fixed
+  index.html      the finished page -- READ ONLY, never edited or submitted
+  style.css       the broken stylesheet the player repairs
   solution.css    the organisers' gold standard
 ```
 
@@ -67,21 +66,38 @@ first/challenge/novacloud/
 renders it as written and swaps its `<link rel="stylesheet">` for the player's
 live CSS (`previewDocument()` in `static/js/wf-arena.js`).
 
-`solution.*` is never served to a browser — `ArenaPageTests` asserts that the
+`solution.css` is never served to a browser — `ArenaPageTests` asserts that the
 answers do not appear in the arena HTML.
 
-### 38 defects, 14 objectives
+### Read-only markup
 
-`style.css` ships with **38 deliberate defects**; only **14 are graded**. The
+Three independent layers keep the markup fixed:
+
+* the textarea carries `readonly` and `aria-readonly`, and is never bound to
+  the editor's input/keydown handlers (`static/js/wf-arena.js`);
+* `submission()` posts `{css}` only;
+* `_read_submitted_css()` in `first/views.py` **ignores any `html` field**, and
+  every check runs against `CHALLENGE_HTML` from disk. A forged `html`
+  parameter can change neither the page nor the score — `ReadOnlyMarkupTests`
+  proves it.
+
+### 37 defects, 14 objectives
+
+`style.css` ships with **37 deliberate defects**; only **14 are graded**. The
 rest are visual noise: squashed pricing cards, a four-column footer, cropped
 avatars. A player may fix them or ignore them, and the arena says so plainly.
 
-`GRADED_CSS_FIXES` / `GRADED_HTML_FIXES` in `first/game_config.py` are the
-authoritative list of what is scored — objective id to the `(broken, fixed)`
-edits that clear it. Grouped edits count as one objective: the feature card
-needs both its padding and its radius, the stats band needs all four numbers.
-`apply_fixes()` raises if an anchor is missing or ambiguous, so a drifted
-challenge file fails the suite loudly rather than grading the wrong thing.
+`GRADED_FIXES` in `first/game_config.py` is the authoritative list of what is
+scored — objective id to the `(broken, fixed)` edits that clear it. Grouped
+edits count as one objective: the stats band needs its column count *and* its
+alignment, the steps row its columns *and* its padding, the pricing row its gap
+*and* the scale of the featured card. A half-finished group does not score
+(`test_grouped_objectives_need_all_their_parts`). `apply_fixes()` raises if an
+anchor is missing or ambiguous, so a drifted challenge file fails the suite
+loudly rather than grading the wrong thing.
+
+The whole round is **17 declarations across 14 objectives** — 17 changed lines
+in a 1278-line stylesheet, about 960 characters of typing.
 
 One defect from the organisers' `style.css` is deliberately **not** shipped:
 `.hero__glow { position: static }` puts a 900×900 decorative div into normal
@@ -95,7 +111,7 @@ views, templates or JS knows what the challenge is.
 
 ### The objectives
 
-14 objectives: **10 CSS, 4 HTML**. They are graded on *outcome*, not on text —
+14 objectives, **all CSS**. They are graded on *outcome*, not on text —
 whitespace, property order, comments and equivalent answers (`flex` vs
 `inline-flex`, `56px` vs `clamp(...)`, `repeat(3, 1fr)` vs `auto-fit`, a
 literal `16px` vs the `--radius-md` token) all pass. Each objective carries a
@@ -111,12 +127,21 @@ independently and the hint for the first one says so.
 
 ### JavaScript
 
-The page ships without any. The supplied markup references a `script.js` that
-would have driven the theme toggle, the FAQ accordion, the mobile menu and a
-stat counter; the preview sandbox blocks scripts, so that tag is removed and
-the four headline numbers live in the markup instead of only in their
-`data-count-to` attributes — which is the `html-stats` objective. The
-stylesheet's `.reveal` rules are dead code: the markup never uses that class.
+Neither the page nor the round needs any. The supplied markup referenced a
+`script.js` driving the theme toggle, the FAQ accordion, the mobile menu and a
+stat counter; the preview sandbox blocks scripts, so the page was made to stand
+on its own:
+
+* the `<script>` tag is removed;
+* the four headline statistics carry their real values in the markup rather
+  than only in `data-count-to` attributes;
+* `.faq-item__answer` opens to `max-height: 400px` in **both** stylesheets, so
+  the answers are readable without an accordion — it is not a defect and not an
+  objective;
+* `.theme-toggle__icon--moon { display: none }` is correct in both stylesheets,
+  so the decorative toggle shows one icon rather than two.
+
+The stylesheet's `.reveal` rules are dead code: the markup never uses that class.
 
 ### Why the preview is scaled
 

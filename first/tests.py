@@ -1,11 +1,13 @@
 """
 Regression tests for the challenge itself.
 
-The important properties: the shipped page fails every graded objective, the
-gold standard passes every one, each graded fix clears exactly its own box,
-equivalent beginner answers are accepted, and the clock cannot be restarted.
+Round 01 is CSS only. The markup is fixed, read-only and never accepted from
+the browser, so the properties that matter are: the shipped stylesheet fails
+every objective, the gold standard passes every one, each graded fix clears
+exactly its own box, equivalent answers are accepted, a posted `html` field
+is ignored, and the clock cannot be restarted.
 
-Note that `style.css` ships 39 deliberate defects while only 14 are graded, so
+`style.css` carries 37 deliberate defects while only 14 are graded, so
 "apply the graded fixes" produces a *passing* submission, not a pristine one.
 `solution.css` remains the organisers' reference.
 """
@@ -25,196 +27,245 @@ from games.asgi import application as presence_application
 from . import presence as first_presence
 from .checks import CSS_CHECKS, HTML_CHECKS, TOTAL_CHECKS, run_checks
 from .game_config import (
+    CHALLENGE_HTML,
     GAME_DURATION_SECONDS,
-    GRADED_CSS_FIXES,
     GRADED_FIXES,
-    GRADED_HTML_FIXES,
     SOLUTION_CSS,
-    SOLUTION_HTML,
     STARTER_CSS,
-    STARTER_HTML,
     apply_fixes,
 )
 from .models import User
 from .presence import HEARTBEAT_INTERVAL_SECONDS, get_presence_store
 
 
-def reference_solution():
-    """The gold-standard submission: every defect repaired."""
-    return SOLUTION_HTML, SOLUTION_CSS
-
-
 def graded_solution():
-    """The minimum passing submission: only the 14 graded objectives fixed."""
-    return (apply_fixes(STARTER_HTML, GRADED_HTML_FIXES),
-            apply_fixes(STARTER_CSS, GRADED_CSS_FIXES))
+    """The minimum passing stylesheet: only the 14 graded objectives fixed."""
+    return apply_fixes(STARTER_CSS, GRADED_FIXES)
 
 
-def results_by_id(html, css):
-    return {r['id']: r['passed'] for r in run_checks(html, css)}
+def results_by_id(css, html=None):
+    return {r['id']: r['passed'] for r in run_checks(html or CHALLENGE_HTML, css)}
 
 
 class ChallengeSourceTests(TestCase):
-    """The four challenge files must stay consistent with the fix table."""
+    """The challenge files must stay consistent with the fix table."""
 
     def test_every_graded_fix_anchors_uniquely(self):
         # apply_fixes raises when an anchor is missing or ambiguous, so this
         # fails loudly the moment a challenge file drifts from the table.
-        apply_fixes(STARTER_HTML, GRADED_HTML_FIXES)
-        apply_fixes(STARTER_CSS, GRADED_CSS_FIXES)
+        apply_fixes(STARTER_CSS, GRADED_FIXES)
 
-    def test_there_is_one_graded_fix_per_objective(self):
-        self.assertEqual(len(GRADED_HTML_FIXES), HTML_CHECKS)
-        self.assertEqual(len(GRADED_CSS_FIXES), CSS_CHECKS)
+    def test_the_round_is_css_only(self):
+        self.assertEqual(HTML_CHECKS, 0)
+        self.assertEqual(CSS_CHECKS, TOTAL_CHECKS)
         self.assertEqual(len(GRADED_FIXES), TOTAL_CHECKS)
-        self.assertEqual({d['id'] for d in run_checks('', '')},
-                         set(GRADED_FIXES))
+        self.assertEqual({d['id'] for d in run_checks('', '')}, set(GRADED_FIXES))
 
     def test_the_round_stays_beginner_sized(self):
-        # 12-16 objectives, mostly CSS. A wider brief would stop being a
-        # 30 minute beginner round, so lock the shape in.
+        # 12-16 objectives. A wider brief would stop being a 30 minute
+        # beginner round, so lock the shape in.
         self.assertTrue(12 <= TOTAL_CHECKS <= 16, TOTAL_CHECKS)
-        self.assertGreaterEqual(CSS_CHECKS / TOTAL_CHECKS, 0.7)
 
     def test_every_objective_ships_three_hints(self):
-        for check in run_checks(STARTER_HTML, STARTER_CSS):
+        for check in run_checks(CHALLENGE_HTML, STARTER_CSS):
             self.assertEqual(len(check['hints']), 3, check['id'])
             self.assertTrue(check['description'].strip(), check['id'])
 
-    def test_the_starter_is_the_finished_novacloud_page(self):
-        # The player repairs a complete site; they never build one.
-        self.assertIn('NovaCloud', STARTER_HTML)
-        self.assertIn('<!DOCTYPE html>', STARTER_HTML)
+    def test_the_markup_is_the_finished_novacloud_page(self):
+        # The player repairs a stylesheet; the page itself is already correct.
+        self.assertIn('<!DOCTYPE html>', CHALLENGE_HTML)
+        self.assertEqual(CHALLENGE_HTML.count('<h1'), 1)
         for section in ('id="features"', 'id="pricing"', 'id="faq"',
                         'id="testimonials"', 'id="how-it-works"', 'site-footer'):
-            self.assertIn(section, STARTER_HTML, section)
-        self.assertGreater(len(STARTER_HTML), 20000)
-        self.assertGreater(len(STARTER_CSS), 20000)
+            self.assertIn(section, CHALLENGE_HTML, section)
+        # the five nav links all resolve to real sections
+        self.assertEqual(CHALLENGE_HTML.count('class="navbar__link"'), 5)
+        self.assertGreater(len(CHALLENGE_HTML), 20000)
 
-    def test_the_page_renders_without_javascript(self):
+    def test_the_page_needs_no_javascript(self):
         # The preview sandbox blocks scripts, so nothing may depend on them.
-        self.assertNotIn('<script', STARTER_HTML)
-        self.assertNotIn('class="reveal"', STARTER_HTML)
-        self.assertNotIn('reveal--visible', STARTER_HTML)
+        self.assertNotIn('<script', CHALLENGE_HTML)
+        self.assertNotIn('class="reveal"', CHALLENGE_HTML)
+        # the statistics read their real values rather than a JS placeholder
+        for number in ('>12,000<', '>99<', '>14<', '>6<'):
+            self.assertIn(number, CHALLENGE_HTML, number)
+        # the FAQ answers are readable without an accordion script
+        self.assertNotIn('.faq-item__answer {\n  max-height: 0;', SOLUTION_CSS)
+        self.assertNotIn('.faq-item__answer {\n  max-height: 0;', STARTER_CSS)
+        # ...and the theme toggle shows one icon, not both
+        self.assertIn('.theme-toggle__icon--moon {\n  display: none;\n}', STARTER_CSS)
 
-    def test_the_shipped_stylesheet_carries_more_noise_than_objectives(self):
-        # A deliberate design decision: 39 defects ship, 14 are scored. If the
-        # two ever converge this assertion is the place to revisit it.
+    def test_the_stylesheet_carries_more_noise_than_objectives(self):
+        # A deliberate design decision: 37 defects ship, 14 are scored.
         differing = sum(1 for a, b in zip(SOLUTION_CSS.splitlines(),
                                           STARTER_CSS.splitlines()) if a != b)
         self.assertGreater(differing, TOTAL_CHECKS)
 
+    def test_the_hero_glow_stays_out_of_normal_flow(self):
+        # `position: static` on the 900x900 glow opens a 900px void above the
+        # hero and hides four objectives. It must never come back.
+        self.assertIn('.hero__glow {\n  position: absolute;', STARTER_CSS)
+
 
 class ChallengeCheckTests(TestCase):
-    def test_starter_page_fails_every_objective(self):
-        results = run_checks(STARTER_HTML, STARTER_CSS)
+    def test_shipped_stylesheet_fails_every_objective(self):
+        results = run_checks(CHALLENGE_HTML, STARTER_CSS)
         self.assertEqual(len(results), TOTAL_CHECKS)
         self.assertEqual([r['id'] for r in results if r['passed']], [])
 
     def test_gold_standard_passes_every_objective(self):
-        html, css = reference_solution()
-        failed = [r['id'] for r in run_checks(html, css) if not r['passed']]
+        failed = [r['id'] for r in run_checks(CHALLENGE_HTML, SOLUTION_CSS) if not r['passed']]
         self.assertEqual(failed, [])
 
     def test_fixing_only_the_graded_objectives_is_enough_to_win(self):
-        html, css = graded_solution()
-        failed = [r['id'] for r in run_checks(html, css) if not r['passed']]
+        css = graded_solution()
+        failed = [r['id'] for r in run_checks(CHALLENGE_HTML, css) if not r['passed']]
         self.assertEqual(failed, [])
-        # ...and that submission is deliberately not the gold standard
-        self.assertNotEqual(css, SOLUTION_CSS)
+        self.assertNotEqual(css, SOLUTION_CSS)  # deliberately not pristine
 
     def test_each_fix_clears_exactly_its_own_objective(self):
         """Fixing one thing must not accidentally tick a different box."""
-        for objective, pairs in GRADED_CSS_FIXES.items():
+        for objective, pairs in GRADED_FIXES.items():
             css = apply_fixes(STARTER_CSS, pairs)
-            passed = [k for k, v in results_by_id(STARTER_HTML, css).items() if v]
+            passed = [k for k, v in results_by_id(css).items() if v]
             self.assertEqual(passed, [objective])
 
-        for objective, pairs in GRADED_HTML_FIXES.items():
-            html = apply_fixes(STARTER_HTML, pairs)
-            passed = [k for k, v in results_by_id(html, STARTER_CSS).items() if v]
-            self.assertEqual(passed, [objective])
+    def test_grouped_objectives_need_all_their_parts(self):
+        """A half-finished grouped fix must not score."""
+        for objective in ('css-stats-band', 'css-steps', 'css-pricing'):
+            pairs = GRADED_FIXES[objective]
+            self.assertEqual(len(pairs), 2, objective)
+            for half in pairs:
+                css = apply_fixes(STARTER_CSS, (half,))
+                self.assertFalse(results_by_id(css)[objective], f'{objective} half {half[0][:30]}')
 
     def test_alternative_but_valid_answers_are_accepted(self):
-        html, css = graded_solution()
+        css = graded_solution()
 
-        auto_fit = css.replace('grid-template-columns: repeat(3, 1fr);',
-                               'grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));', 1)
-        self.assertTrue(results_by_id(html, auto_fit)['css-features'])
+        auto_fit = css.replace('.features__grid {\n  display: grid;\n'
+                               '  grid-template-columns: repeat(3, 1fr);',
+                               '.features__grid {\n  display: grid;\n'
+                               '  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));')
+        self.assertTrue(results_by_id(auto_fit)['css-features'])
 
-        three_tracks = css.replace('grid-template-columns: repeat(3, 1fr);',
-                                   'grid-template-columns: 1fr 1fr 1fr;', 1)
-        self.assertTrue(results_by_id(html, three_tracks)['css-features'])
+        three_tracks = css.replace('.features__grid {\n  display: grid;\n'
+                                   '  grid-template-columns: repeat(3, 1fr);',
+                                   '.features__grid {\n  display: grid;\n'
+                                   '  grid-template-columns: 1fr 1fr 1fr;')
+        self.assertTrue(results_by_id(three_tracks)['css-features'])
 
         # a plain size instead of the design system's clamp()
-        plain_size = css.replace('font-size: clamp(2.4rem, 4.4vw, 3.6rem);',
-                                 'font-size: 56px;')
-        self.assertTrue(results_by_id(html, plain_size)['css-hero-title'])
+        plain = css.replace('font-size: clamp(2.4rem, 4.4vw, 3.6rem);', 'font-size: 56px;')
+        self.assertTrue(results_by_id(plain)['css-hero-title'])
 
         # inline-flex is as good as flex for the header bar
-        inline_flex = css.replace('.navbar {\n  display: flex;',
-                                  '.navbar {\n  display: inline-flex;')
-        self.assertTrue(results_by_id(html, inline_flex)['css-navbar-row'])
+        inline = css.replace('.navbar {\n  display: flex;', '.navbar {\n  display: inline-flex;')
+        self.assertTrue(results_by_id(inline)['css-navbar-row'])
 
-        # rem gaps, and a literal radius instead of the token
+        # rem units, and a literal radius instead of the token
         rem_gap = css.replace('  gap: 32px;\n  flex: 1;', '  gap: 2rem;\n  flex: 1;')
-        self.assertTrue(results_by_id(html, rem_gap)['css-nav-spacing'])
+        self.assertTrue(results_by_id(rem_gap)['css-nav-spacing'])
 
-        literal_radius = css.replace('  border-radius: var(--radius-md);\n  padding: 32px;',
-                                     '  border-radius: 16px;\n  padding: 2rem;')
-        self.assertTrue(results_by_id(html, literal_radius)['css-feature-box'])
+        literal = css.replace('  border-radius: var(--radius-md);\n  padding: 32px;',
+                              '  border-radius: 16px;\n  padding: 2rem;')
+        self.assertTrue(results_by_id(literal)['css-feature-box'])
 
         # deleting the tilt is as good as reducing it
         for value in ('rotate(0deg)', 'none'):
             upright = STARTER_CSS.replace('  overflow: hidden;\n  transform: rotate(45deg);',
                                           '  overflow: hidden;\n  transform: ' + value + ';')
-            self.assertTrue(results_by_id(STARTER_HTML, upright)['css-console'], value)
+            self.assertTrue(results_by_id(upright)['css-console'], value)
 
-        # the stat numbers may be written with or without a thousands separator
-        plain_numbers = html.replace('>12,000<', '>12000<')
-        self.assertTrue(results_by_id(plain_numbers, css)['html-stats'])
+        # dropping the featured card's transform entirely is a valid answer
+        no_scale = css.replace('  border-color: transparent;\n  transform: scale(1.04);',
+                               '  border-color: transparent;')
+        self.assertTrue(results_by_id(no_scale)['css-pricing'])
+
+        # a square icon at any size, not just 48px
+        bigger_icon = css.replace('  width: 48px;\n  height: 48px;\n'
+                                  '  border-radius: var(--radius-sm);',
+                                  '  width: 56px;\n  height: 56px;\n'
+                                  '  border-radius: var(--radius-sm);')
+        self.assertTrue(results_by_id(bigger_icon)['css-feature-icon'])
 
     def test_formatting_noise_does_not_affect_grading(self):
-        html, css = graded_solution()
-        noisy = css.replace('.navbar {\n  display: flex;\n  align-items: center;',
-                            '.navbar{align-items:center;display:flex;  /* tidied */')
-        self.assertTrue(results_by_id(html, noisy)['css-navbar-row'])
+        css = graded_solution().replace(
+            '.navbar {\n  display: flex;\n  align-items: center;',
+            '.navbar{align-items:center;display:flex;  /* tidied */')
+        self.assertTrue(results_by_id(css)['css-navbar-row'])
 
     def test_the_faq_icon_rotation_is_not_mistaken_for_the_console(self):
-        # `.faq-item--open .faq-item__icon` legitimately uses rotate(45deg);
-        # it must not be read as the console's transform, in either direction.
+        # `.faq-item--open .faq-item__icon` legitimately uses rotate(45deg).
         self.assertIn('.faq-item--open .faq-item__icon', STARTER_CSS)
-        html, css = graded_solution()
-        self.assertTrue(results_by_id(html, css)['css-console'])
-        self.assertFalse(results_by_id(STARTER_HTML, STARTER_CSS)['css-console'])
+        self.assertTrue(results_by_id(graded_solution())['css-console'])
+        self.assertFalse(results_by_id(STARTER_CSS)['css-console'])
 
     def test_hover_rules_do_not_satisfy_base_selectors(self):
         css = STARTER_CSS.replace('.navbar__link:hover {\n  color: var(--color-text);',
                                   '.navbar__link:hover {\n  color: var(--color-text);\n'
                                   '  display: flex;')
-        self.assertFalse(results_by_id(STARTER_HTML, css)['css-navbar-row'])
+        self.assertFalse(results_by_id(css)['css-navbar-row'])
 
     def test_media_query_answers_are_scoped_to_the_media_query(self):
-        html, css = graded_solution()
-        # a desktop two-column hero with no narrow rule is not responsive
+        css = graded_solution()
         stripped = css.replace('@media (max-width: 860px) {', '@media (min-width: 861px) {')
-        self.assertFalse(results_by_id(html, stripped)['css-responsive'])
-        self.assertTrue(results_by_id(html, stripped)['css-hero-split'])
+        self.assertFalse(results_by_id(stripped)['css-responsive'])
+        self.assertTrue(results_by_id(stripped)['css-hero-split'])
 
     def test_malformed_submission_does_not_raise(self):
-        results = run_checks('<div><p>unclosed', 'body { color: ; } @media { .x {')
+        results = run_checks(CHALLENGE_HTML, 'body { color: ; } @media { .x {')
         self.assertEqual(len(results), TOTAL_CHECKS)
 
     def test_hostile_css_is_graded_without_crashing(self):
         hostile = '* { all: unset !important; } body { background: red !important; }'
-        results = results_by_id(STARTER_HTML, hostile)
+        results = results_by_id(hostile)
         self.assertEqual(len(results), TOTAL_CHECKS)
         # Deleting the stylesheet does not solve the round. (`css-console`
         # legitimately passes: with no transform declared, nothing is rotated.)
         for objective in ('css-line-height', 'css-navbar-row', 'css-nav-spacing',
                           'css-hero-split', 'css-hero-title', 'css-hero-gap',
-                          'css-features', 'css-feature-box', 'css-responsive'):
+                          'css-stats-band', 'css-features', 'css-feature-box',
+                          'css-feature-icon', 'css-steps', 'css-pricing',
+                          'css-responsive'):
             self.assertFalse(results[objective], objective)
+
+
+class ReadOnlyMarkupTests(TestCase):
+    """The markup is fixed: it is never taken from the client, ever."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='Tester', pc_no='PC-RO', password='pw-123456')
+        self.client.force_login(self.user, backend='first.backends.PCNoBackend')
+        self.client.get(reverse('home'))
+
+    def test_a_posted_html_field_is_ignored_on_save(self):
+        self.client.post(reverse('save_css'), {'html': '<h1>hacked</h1>', 'css': STARTER_CSS})
+        served = self.client.get(reverse('get_css')).json()
+        self.assertEqual(served['html'], CHALLENGE_HTML)
+        self.assertNotIn('hacked', served['html'])
+
+    def test_a_posted_html_field_cannot_change_the_score(self):
+        # Every objective is CSS, so even a "perfect" forged page scores zero.
+        data = self.client.post(reverse('api_check'),
+                                {'html': CHALLENGE_HTML, 'css': STARTER_CSS}).json()
+        self.assertEqual(data['passed'], 0)
+
+        data = self.client.post(reverse('api_check'),
+                                {'html': '<h1>hacked</h1>', 'css': graded_solution()}).json()
+        self.assertEqual(data['passed'], TOTAL_CHECKS)
+
+    def test_reset_returns_the_stylesheet_only(self):
+        self.client.post(reverse('save_css'), {'css': 'body{}'})
+        data = self.client.post(reverse('api_reset'), {}).json()
+        self.assertEqual(data['css'], STARTER_CSS)
+        self.assertNotIn('html', data)
+
+    def test_the_arena_marks_the_html_pane_read_only(self):
+        page = self.client.get(reverse('home')).content.decode()
+        self.assertIn('id="wf-html"', page)
+        self.assertIn('readonly', page)
+        self.assertIn('aria-readonly="true"', page)
+        self.assertIn('read only', page)
 
 
 class ChallengeClockTests(TestCase):
@@ -230,7 +281,6 @@ class ChallengeClockTests(TestCase):
         started = self.user.game_start_time
         self.assertIsNotNone(started)
 
-        # a refresh must not move the start time
         self.client.get(reverse('home'))
         self.user.refresh_from_db()
         self.assertEqual(self.user.game_start_time, started)
@@ -242,16 +292,14 @@ class ChallengeClockTests(TestCase):
         self.assertGreater(data['remaining'], GAME_DURATION_SECONDS - 10)
         self.assertFalse(data['expired'])
 
-    def test_reset_restores_the_broken_page_without_touching_the_clock(self):
+    def test_reset_restores_the_broken_css_without_touching_the_clock(self):
         self.client.get(reverse('home'))
-        html, css = graded_solution()
-        self.client.post(reverse('save_css'), {'html': html, 'css': css})
+        self.client.post(reverse('save_css'), {'css': graded_solution()})
 
         self.user.refresh_from_db()
         started = self.user.game_start_time
 
         data = self.client.post(reverse('api_reset'), {}).json()
-        self.assertEqual(data['html'], STARTER_HTML)
         self.assertEqual(data['css'], STARTER_CSS)
 
         self.user.refresh_from_db()
@@ -262,32 +310,30 @@ class ChallengeClockTests(TestCase):
         self.user.game_start_time = timezone.now() - timedelta(seconds=GAME_DURATION_SECONDS + 1)
         self.user.save(update_fields=['game_start_time'])
 
-        html, css = graded_solution()
-        saved = self.client.post(reverse('save_css'), {'html': 'x', 'css': 'y'}).json()
+        saved = self.client.post(reverse('save_css'), {'css': 'body{}'}).json()
         self.assertEqual(saved['error'], 'Time is up!')
 
-        checked = self.client.post(reverse('api_check'), {'html': html, 'css': css}).json()
+        checked = self.client.post(reverse('api_check'), {'css': graded_solution()}).json()
         self.assertEqual(checked['error'], 'Time is up!')
         self.assertFalse(checked['completed'])
 
         self.user.refresh_from_db()
         self.assertIsNone(self.user.completed_at)
-        self.assertNotEqual(self.client.get(reverse('get_css')).json()['html'], 'x')
+        self.assertNotEqual(self.client.get(reverse('get_css')).json()['css'], 'body{}')
 
     def test_expired_session_also_refuses_reset(self):
         self.client.get(reverse('home'))
-        self.client.post(reverse('save_css'), {'html': 'mine', 'css': 'mine'})
+        self.client.post(reverse('save_css'), {'css': 'body{ /* mine */ }'})
         self.user.game_start_time = timezone.now() - timedelta(seconds=GAME_DURATION_SECONDS + 1)
         self.user.save(update_fields=['game_start_time'])
 
         data = self.client.post(reverse('api_reset'), {}).json()
-        self.assertNotIn('html', data)
-        self.assertEqual(self.client.get(reverse('get_css')).json()['html'], 'mine')
+        self.assertNotIn('css', data)
+        self.assertEqual(self.client.get(reverse('get_css')).json()['css'], 'body{ /* mine */ }')
 
     def test_solving_the_challenge_completes_and_locks_the_session(self):
         self.client.get(reverse('home'))
-        html, css = graded_solution()
-        data = self.client.post(reverse('api_check'), {'html': html, 'css': css}).json()
+        data = self.client.post(reverse('api_check'), {'css': graded_solution()}).json()
 
         self.assertEqual(data['passed'], TOTAL_CHECKS)
         self.assertTrue(data['completed'])
@@ -299,23 +345,20 @@ class ChallengeClockTests(TestCase):
 
     def test_partial_progress_is_recorded_as_a_best_score(self):
         self.client.get(reverse('home'))
-        some = dict(list(GRADED_CSS_FIXES.items())[:3])
-        css = apply_fixes(STARTER_CSS, some)
-        data = self.client.post(reverse('api_check'), {'html': STARTER_HTML, 'css': css}).json()
+        some = dict(list(GRADED_FIXES.items())[:3])
+        data = self.client.post(reverse('api_check'), {'css': apply_fixes(STARTER_CSS, some)}).json()
 
         self.assertEqual(data['passed'], 3)
         self.assertFalse(data['completed'])
 
-        # a worse follow-up submission must not lower the recorded best
-        self.client.post(reverse('api_check'), {'html': STARTER_HTML, 'css': STARTER_CSS})
+        self.client.post(reverse('api_check'), {'css': STARTER_CSS})
         self.user.refresh_from_db()
         self.assertEqual(self.user.best_score, 3)
 
     def test_autosaved_work_counts_even_without_running_the_checks(self):
         self.client.get(reverse('home'))
-        some = dict(list(GRADED_CSS_FIXES.items())[:4])
-        css = apply_fixes(STARTER_CSS, some)
-        self.client.post(reverse('save_css'), {'html': STARTER_HTML, 'css': css})
+        some = dict(list(GRADED_FIXES.items())[:4])
+        self.client.post(reverse('save_css'), {'css': apply_fixes(STARTER_CSS, some)})
 
         self.client.get(reverse('home'))  # grading happens on render
         self.user.refresh_from_db()
@@ -323,8 +366,7 @@ class ChallengeClockTests(TestCase):
 
     def test_running_out_of_time_closes_the_round_even_on_a_perfect_page(self):
         self.client.get(reverse('home'))
-        html, css = graded_solution()
-        self.client.post(reverse('save_css'), {'html': html, 'css': css})
+        self.client.post(reverse('save_css'), {'css': graded_solution()})
 
         self.user.game_start_time = timezone.now() - timedelta(seconds=GAME_DURATION_SECONDS + 1)
         self.user.save(update_fields=['game_start_time'])
@@ -351,28 +393,26 @@ class ArenaPageTests(TestCase):
         page = self.client.get(reverse('intro')).content.decode()
         self.assertIn('NovaCloud', page)
         self.assertIn('Repair the code. Beat the clock.', page)
-        self.assertIn(str(TOTAL_CHECKS), page)
         self.assertIn('Round 01', page)
+        self.assertIn(str(TOTAL_CHECKS), page)
+        self.assertIn('CSS DEBUGGING', page)
+        self.assertIn('read-only', page)
 
-    def test_arena_renders_the_broken_page_and_every_objective(self):
+    def test_arena_renders_the_broken_css_and_every_objective(self):
         page = self.client.get(reverse('home')).content.decode()
         self.assertIn('wf-preview', page)
         self.assertIn('sandbox', page)
-        for check in run_checks(STARTER_HTML, STARTER_CSS):
+        for check in run_checks(CHALLENGE_HTML, STARTER_CSS):
             self.assertIn(f'data-check-id="{check["id"]}"', page)
-        # three hints per objective, all hidden until the player asks
         self.assertEqual(page.count('data-hint-level="3"'), TOTAL_CHECKS)
 
     def test_arena_never_ships_the_answers_to_the_browser(self):
         page = self.client.get(reverse('home')).content.decode()
-        # anchored to the rule each answer belongs to: `repeat(3, 1fr)` on its
-        # own is legitimately still in the file, for `.pricing__grid`.
         for answer in ('.features__grid {\n  display: grid;\n'
                        '  grid-template-columns: repeat(3, 1fr);',
                        '.hero__title {\n  font-size: clamp(2.4rem, 4.4vw, 3.6rem);',
                        '@media (max-width: 860px)'):
             self.assertNotIn(answer, page, answer)
-        # ...while the defects the player must notice are all present
         for defect in ('display: block', 'font-size: 1rem', 'gap: 150px',
                        'rotate(45deg)', '@media (min-width: 860px)'):
             self.assertIn(defect, page, defect)

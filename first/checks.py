@@ -357,14 +357,26 @@ def _unitless(value):
     return float(match.group(1)) if match else _to_px(value)
 
 
+def _scale_factor(value):
+    """The largest scale() factor in a transform value; 1.0 when absent."""
+    if not value:
+        return 1.0
+    factors = [
+        float(n)
+        for args in re.findall(r'scale[xy3d]*\s*\(([^)]*)\)', value, re.I)
+        for n in re.findall(r'-?\d*\.?\d+', args)
+    ]
+    return max(factors) if factors else 1.0
+
+
 # --------------------------------------------------------------------------
 # The objectives
 #
-# style.css ships 39 deliberate defects; these 14 are the graded ones. Each
-# check asks about an outcome, so any equivalent repair passes.
+# Round 01 is CSS only: the markup is read-only and is never submitted, so
+# every objective below asks a question about the stylesheet. `style.css`
+# ships 37 deliberate defects and these 14 are the graded ones. Each check
+# asks about an outcome, so any equivalent repair passes.
 # --------------------------------------------------------------------------
-
-# --- CSS ---
 
 def _check_line_height(dom, rules):
     return (_unitless(declared(rules, 'body', 'line-height')) or 0) >= 1.3
@@ -400,6 +412,12 @@ def _check_console_upright(dom, rules):
     return _max_rotation(declared(rules, '.console', 'transform', exact=True)) <= 3
 
 
+def _check_stats_band(dom, rules):
+    columns = _count_columns(declared(rules, '.stats__grid', 'grid-template-columns'))
+    aligned = (declared(rules, '.stat-card', 'text-align') or '').lower()
+    return columns in (4, AUTO_COLUMNS) and aligned == 'center'
+
+
 def _check_features_grid(dom, rules):
     columns = _count_columns(declared(rules, '.features__grid', 'grid-template-columns'))
     return columns in (3, AUTO_COLUMNS)
@@ -412,34 +430,32 @@ def _check_feature_box(dom, rules):
     return padding is not None and padding >= 16 and rounded
 
 
+def _check_feature_icon(dom, rules):
+    width = _to_px(declared(rules, '.feature-card__icon', 'width'))
+    height = _to_px(declared(rules, '.feature-card__icon', 'height'))
+    if width is None or height is None:
+        return False
+    # A square-ish tile, not a stretched bar.
+    return width <= height * 1.5
+
+
+def _check_steps(dom, rules):
+    columns = _count_columns(declared(rules, '.steps', 'grid-template-columns'))
+    padding = _padding_top(rules, '.step')
+    return columns in (3, AUTO_COLUMNS) and padding is not None and padding >= 16
+
+
+def _check_pricing(dom, rules):
+    gap = _smallest_gap(rules, '.pricing__grid')
+    scale = _scale_factor(declared(rules, '.pricing-card--featured', 'transform', exact=True))
+    return gap is not None and gap >= 12 and scale >= 1
+
+
 def _check_responsive(dom, rules):
     # The 860px block must be a max-width query or the phone layout never runs.
     return _count_columns(
         declared(rules, '.hero__container', 'grid-template-columns', media='narrow')
     ) == 1
-
-
-# --- HTML ---
-
-def _check_h1(dom, rules):
-    return len(dom.find_all(tag='h1')) == 1
-
-
-def _check_nav_link(dom, rules):
-    menu = dom.find(cls='navbar__menu')
-    return bool(menu) and len(menu.find_all(tag='a')) >= 5
-
-
-def _check_feature_cards(dom, rules):
-    grid = dom.find(cls='features__grid')
-    return bool(grid) and len(grid.find_all(cls='feature-card')) >= 6
-
-
-def _check_stat_values(dom, rules):
-    values = dom.find_all(cls='stat-card__value')
-    if len(values) < 4:
-        return False
-    return all(re.search(r'[1-9]', node.all_text()) for node in values)
 
 
 # id, group, title, description, (hint 1, hint 2, hint 3), function
@@ -499,11 +515,22 @@ _DEFINITIONS = [
 
     ('css-console', 'css', 'The deploy console sits straight',
      'The dark console panel in the hero should be almost level.',
-     ('The console panel is tipped over at a wild angle.',
+     ('The console panel is tipped over at a wild angle and swamps the top of '
+      'the page.',
       'Something is rotating that one element. The design does tilt it, but only '
       'very slightly.',
       'Fix the transform on .console — it should be about 1 degree, not 45.'),
      _check_console_upright),
+
+    ('css-stats-band', 'css', 'The statistics band is a centered 4-column row',
+     'The four headline figures should sit in one centered row.',
+     ('The four statistics are in a 2x2 block and every number hugs the left edge '
+      'of its card.',
+      'Two rules are involved: one decides how many columns the band has, the '
+      'other how the text sits inside each card.',
+      'Set grid-template-columns on .stats__grid to four columns, and text-align '
+      'on .stat-card to center.'),
+     _check_stats_band),
 
     ('css-features', 'css', 'Feature cards form a 3-column grid',
      'The six feature cards should sit three across on a desktop screen.',
@@ -522,6 +549,35 @@ _DEFINITIONS = [
       'the design system has a --radius-md token for exactly this.'),
      _check_feature_box),
 
+    ('css-feature-icon', 'css', 'Feature icons are square tiles',
+     'Each feature icon should sit in a small square, not a stretched bar.',
+     ('The little coloured icon tiles are stretched into wide bars across the '
+      'top of every feature card.',
+      'The tile is meant to be as wide as it is tall. One of those two numbers '
+      'is wrong.',
+      'The height on .feature-card__icon is 48px. Make the width match it.'),
+     _check_feature_icon),
+
+    ('css-steps', 'css', 'The three steps sit in a padded 3-column row',
+     'The workflow section has three steps and they need room to breathe.',
+     ('The three step cards are squeezed into three quarters of the row, and '
+      'their text is jammed against the card edges.',
+      'Two rules: one sets how many columns the row has (there are three steps, '
+      'not four), the other the space inside each card.',
+      'Set grid-template-columns on .steps to three columns, and give .step its '
+      'padding back — the other cards use about 32px.'),
+     _check_steps),
+
+    ('css-pricing', 'css', 'Pricing cards are spaced and the featured one stands out',
+     'The three plans need space between them, and "Growth" should be the biggest.',
+     ('The three pricing cards are glued together, and the highlighted "Most '
+      'popular" plan is smaller than the two beside it.',
+      'One property controls the space between the cards; another is scaling the '
+      'featured card the wrong way.',
+      'Give .pricing__grid a gap (the other rows use 28px) and make the scale() '
+      'on .pricing-card--featured larger than 1, not smaller.'),
+     _check_pricing),
+
     ('css-responsive', 'css', 'Mobile styles only apply to mobile',
      'The phone layout should take over below 860px, not above it.',
      ('On this full-size preview the nav links have vanished and a hamburger '
@@ -532,39 +588,6 @@ _DEFINITIONS = [
       'The @media query at 860px asks for min-width, so it applies to everything '
       'wider than a phone. It should be max-width.'),
      _check_responsive),
-
-    ('html-h1', 'html', 'The page has exactly one <h1>',
-     'The hero headline is the main title of the page and should be marked up as one.',
-     ('Every heading on this page is an <h2> or lower, including the one at the '
-      'very top.',
-      'A page should have exactly one top-level heading, and it belongs to the hero.',
-      'Change the hero <h2 class="hero__title"> (and its closing tag) to <h1>.'),
-     _check_h1),
-
-    ('html-nav-link', 'html', 'The navigation reaches every section',
-     'All five sections should be linked from the header menu.',
-     ('The page has an FAQ section, but there is no way to get to it from the top.',
-      'Count the links in the header menu, then count the sections they point at.',
-      'Add a fifth <li><a href="#faq" class="navbar__link">FAQ</a></li> inside '
-      '<ul class="navbar__menu">.'),
-     _check_nav_link),
-
-    ('html-feature-card', 'html', 'All six feature cards are styled',
-     'Every article in the features grid should be a feature card.',
-     ('Five feature cards have a border and a background. One — "Instant '
-      'rollback" — is bare text on the page background.',
-      'The CSS for the cards is fine; that one element is not being selected by it.',
-      'The <article> wrapping "Instant rollback" is missing class="feature-card".'),
-     _check_feature_cards),
-
-    ('html-stats', 'html', 'The statistics show real numbers',
-     'The four headline figures should read their actual values.',
-     ('The whole statistics band reads zero: "0+", "0.99%", "0" and "0min".',
-      'Each real number is sitting in a data-count-to attribute, but the text a '
-      'visitor actually reads is still a placeholder.',
-      'Put each data-count-to value into its <span class="stat-card__value"> as '
-      'the text: 12,000 / 99 / 14 / 6.'),
-     _check_stat_values),
 ]
 
 TOTAL_CHECKS = len(_DEFINITIONS)
@@ -581,7 +604,12 @@ def objectives():
 
 
 def run_checks(html, css):
-    """Return one result dict per objective. Never raises on bad input."""
+    """Return one result dict per objective. Never raises on bad input.
+
+    `html` is the fixed challenge markup, supplied by the server -- it is not
+    editable, but the checks receive it so a future round can grade markup
+    without changing this signature.
+    """
     dom = parse_html(html)
     rules = parse_css(css)
 

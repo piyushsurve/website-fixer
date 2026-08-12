@@ -5,22 +5,23 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .checks import CSS_CHECKS, HTML_CHECKS, TOTAL_CHECKS, run_checks
+from .checks import TOTAL_CHECKS, run_checks
 from .game_config import (
+    CHALLENGE_HTML,
     DIFFICULTY,
     GAME_DURATION_SECONDS,
+    MODE,
     ROUND_NUMBER,
     SITE_NAME,
     SITE_TAGLINE,
     STARTER_CSS,
-    STARTER_HTML,
     TIMER_DANGER_SECONDS,
     TIMER_SYNC_INTERVAL_SECONDS,
     TIMER_WARNING_SECONDS,
 )
 from .models import CssRule, User
 
-# Generous ceiling; the challenge page is ~12 KB of HTML and ~11 KB of CSS.
+# Generous ceiling; the shipped stylesheet is ~25 KB.
 MAX_SUBMISSION_CHARS = 200_000
 
 # Everything the templates need to name the current round in one place.
@@ -29,10 +30,9 @@ CHALLENGE = {
     'site': SITE_NAME,
     'tagline': SITE_TAGLINE,
     'difficulty': DIFFICULTY,
+    'mode': MODE,
     'minutes': GAME_DURATION_SECONDS // 60,
     'objectives': TOTAL_CHECKS,
-    'css_objectives': CSS_CHECKS,
-    'html_objectives': HTML_CHECKS,
 }
 
 
@@ -43,9 +43,10 @@ def _ensure_session(request):
 
 
 def _get_submission(user):
+    """The player's stylesheet. The markup is fixed and never stored per-user."""
     submission, _ = CssRule.objects.get_or_create(
         user=user,
-        defaults={'html': STARTER_HTML, 'css': STARTER_CSS},
+        defaults={'html': '', 'css': STARTER_CSS},
     )
     return submission
 
@@ -106,14 +107,14 @@ def home(request):
     # Grade what is on disk before rendering. Autosaved work that the player
     # never explicitly ran the checks on still counts -- otherwise the end of
     # round summary can disagree with the ticks in the objectives panel.
-    checks = run_checks(submission.html, submission.css)
+    checks = run_checks(CHALLENGE_HTML, submission.css)
     passed = sum(1 for check in checks if check['passed'])
     _record_progress(request.user, passed)
 
     state = _state(request.user)
 
     return render(request, 'entry.html', {
-        'html': submission.html,
+        'html': CHALLENGE_HTML,
         'css': submission.css,
         'state': state,
         'checks': checks,
@@ -185,10 +186,14 @@ def user_logout(request):
 
 # ------------------------------------------------------------------ api ----
 
-def _read_submission_payload(request):
-    html = (request.POST.get('html') or '')[:MAX_SUBMISSION_CHARS]
-    css = (request.POST.get('css') or '')[:MAX_SUBMISSION_CHARS]
-    return html, css
+def _read_submitted_css(request):
+    """Round 01 is CSS only: any `html` field in the POST is ignored.
+
+    The markup the player sees is read-only and the markup the checker grades
+    always comes from `CHALLENGE_HTML`, so a forged `html` parameter cannot
+    change the page or the score.
+    """
+    return (request.POST.get('css') or '')[:MAX_SUBMISSION_CHARS]
 
 
 @require_POST
@@ -202,9 +207,9 @@ def save_css(request):
         state['error'] = 'Time is up!' if state['expired'] else 'Challenge already completed.'
         return JsonResponse(state, status=200)
 
-    html, css = _read_submission_payload(request)
+    css = _read_submitted_css(request)
     CssRule.objects.update_or_create(
-        user=request.user, defaults={'html': html, 'css': css},
+        user=request.user, defaults={'css': css},
     )
     return JsonResponse(state)
 
@@ -213,7 +218,8 @@ def get_css(request):
     if not request.user.is_authenticated:
         return JsonResponse({'html': '', 'css': ''})
     submission = _get_submission(request.user)
-    return JsonResponse({'html': submission.html, 'css': submission.css})
+    # The markup is the same for everybody and is never edited.
+    return JsonResponse({'html': CHALLENGE_HTML, 'css': submission.css})
 
 
 def api_state(request):
@@ -233,14 +239,14 @@ def api_check(request):
     if user.is_locked:
         submission = _get_submission(user)
         payload = _state(user)
-        payload['checks'] = run_checks(submission.html, submission.css)
+        payload['checks'] = run_checks(CHALLENGE_HTML, submission.css)
         payload['error'] = 'Time is up!' if user.is_expired else 'Challenge already completed.'
         return JsonResponse(payload)
 
-    html, css = _read_submission_payload(request)
-    CssRule.objects.update_or_create(user=user, defaults={'html': html, 'css': css})
+    css = _read_submitted_css(request)
+    CssRule.objects.update_or_create(user=user, defaults={'css': css})
 
-    checks = run_checks(html, css)
+    checks = run_checks(CHALLENGE_HTML, css)
     passed = sum(1 for check in checks if check['passed'])
     _record_progress(user, passed)
 
@@ -259,8 +265,8 @@ def api_reset(request):
         return JsonResponse(_state(request.user))
 
     CssRule.objects.update_or_create(
-        user=request.user, defaults={'html': STARTER_HTML, 'css': STARTER_CSS},
+        user=request.user, defaults={'css': STARTER_CSS},
     )
     payload = _state(request.user)
-    payload.update({'html': STARTER_HTML, 'css': STARTER_CSS})
+    payload.update({'css': STARTER_CSS})
     return JsonResponse(payload)

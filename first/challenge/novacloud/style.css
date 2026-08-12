@@ -309,7 +309,7 @@ h1, h2, h3 {
 }
 
 .theme-toggle__icon--moon {
-  display: block;
+  display: none;
 }
 
 [data-theme='dark'] .theme-toggle__icon--sun {
@@ -1027,7 +1027,7 @@ h1, h2, h3 {
 }
 
 .faq-item__answer {
-  max-height: 0;
+  max-height: 400px;
   overflow: hidden;
   transition: max-height var(--transition-base);
 }

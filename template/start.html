@@ -11,14 +11,18 @@
 
 <div class="wf-auth">
   <div class="wf-card wf-auth__card wf-launch">
+    <span class="wf-badge wf-badge--accent">Round {{ challenge.round }} · {{ challenge.site }}</span>
+
     <h1 class="wf-launch__title">Loading the broken site…</h1>
-    <p class="wf-launch__text" id="wf-launch-line">$ fetching pixel-perk/index.html</p>
+    <p class="wf-launch__text" id="wf-launch-line">$ fetching novacloud/index.html</p>
 
     <div class="wf-launch__track">
       <div class="wf-launch__fill" id="wf-launch-fill"></div>
     </div>
 
-    <p class="wf-launch__note">Your 30 minute clock starts when the arena opens.</p>
+    <p class="wf-launch__note">
+      Your {{ challenge.minutes }} minute clock starts when the arena opens.
+    </p>
     <noscript>
       <p class="wf-launch__note"><a href="/home/">Continue to the arena →</a></p>
     </noscript>
@@ -28,8 +32,8 @@
 <script>
   (function () {
     var lines = [
-      '$ fetching pixel-perk/index.html',
-      '$ loading style.css … 14 problems found',
+      '$ fetching novacloud/index.html',
+      '$ loading style.css … {{ challenge.objectives }} objectives found',
       '$ starting sandboxed preview',
       '$ arena ready'
     ];

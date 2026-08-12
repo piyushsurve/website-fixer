@@ -4,7 +4,22 @@ Single source of truth for the Website Fixer challenge.
 Everything the game needs to know about "what the player is fixing" and
 "how long they get" lives here, so views, checks and templates never
 hardcode duplicate copies of it.
+
+The challenge itself is *not* written in this file. Round 01 ships as four
+plain files under ``first/challenge/novacloud/``:
+
+    index.html      the broken page handed to the player
+    style.css       the broken stylesheet handed to the player
+    solution.html   the page with every objective fixed
+    solution.css    the organisers' gold standard
+
+`style.css` ships 39 deliberate defects; 14 of them are graded objectives.
+The rest are visual noise the player may fix or ignore -- `GRADED_FIXES`
+below is the authoritative list of what is scored, and `checks.py` grades
+the *outcome* of each one rather than matching this text.
 """
+
+from pathlib import Path
 
 # Hard 30 minute session.
 GAME_DURATION_SECONDS = 30 * 60
@@ -17,267 +32,132 @@ TIMER_WARNING_SECONDS = 10 * 60
 TIMER_SYNC_INTERVAL_SECONDS = 20
 
 
-# The broken page the player has to repair. This is a <body> fragment --
-# the preview iframe supplies the document shell around it.
-STARTER_HTML = """<header class="site-header">
-  <div class="brand">
-    <span class="brand-mark">PP</span>
-    <span class="brand-name">Pixel Perk</span>
-  </div>
+# ---------------------------------------------------------------- round ----
 
-  <nav class="site-nav">
-    <a href="#features">Why us</a>
-    <a href="#menu">Menu</a>
-    <a href="#plans">Plans</a>
-  </nav>
-</header>
+ROUND_NUMBER = '01'
+SITE_NAME = 'NovaCloud'
+SITE_TAGLINE = 'AI-powered cloud platform landing page'
+DIFFICULTY = 'Basic'
 
-<!-- HERO -->
-<section class="hero">
-  <h2 class="hero-title">Coffee that compiles.</h2>
-  <p class="hero-text">
-    Freshly roasted beans delivered to developers who would rather ship
-    features than queue at a counter. Pick a plan, skip the line.
-  </p>
-
-  <div class="btn btn-primary">Order a bag</div>
-
-  <img class="hero-shot" src="/static/img/hero-cup.svg">
-</section>
-
-<!-- FEATURES -->
-<section class="section" id="features">
-  <h2 class="section-title">Why Pixel Perk</h2>
-  <p class="section-sub">Three reasons our beans end up on every desk.</p>
-
-  <div class="card-grid">
-    <article class="card">
-      <span class="card-icon">🔥</span>
-      <h3 class="card-title">Roasted weekly</h3>
-      <p class="card-text">Every batch leaves the roaster on a Monday and reaches you before Friday.</p>
-    </article>
-
-    <article class="card">
-      <span class="card-icon">🚚</span>
-      <p class="card-text">Free delivery on every recurring order, anywhere in the city.</p>
-    </article>
-
-    <article>
-      <span class="card-icon">♻️</span>
-      <h3 class="card-title">Refillable tins</h3>
-      <p class="card-text">Send the tin back, we clean it, you get a discount on the next bag.</p>
-    </article>
-  </div>
-</section>
-
-<!-- MENU -->
-<section class="section section-alt" id="menu">
-  <h2 class="section-title">On the menu</h2>
-
-  <div class="card-grid">
-    <article class="card">
-      <h3 class="card-title">House Blend</h3>
-      <p class="card-text">Chocolate, hazelnut, very forgiving.</p>
-      <p class="card-price">$14</p>
-    </article>
-
-    <article class="card">
-      <h3 class="card-title">Late Night</h3>
-      <p class="card-text">Dark roast for the last hour of a deadline.</p>
-      <p class="card-price">$16</p>
-    </article>
-
-    <article class="card">
-      <h3 class="card-title">Sunrise</h3>
-      <p class="card-text">Bright, citrusy, dangerously easy to drink.</p>
-      <p class="card-price">$15</p>
-    </article>
-  </div>
-</section>
-
-<!-- PLANS -->
-<section class="section" id="plans">
-  <h2 class="section-title">Simple plans</h2>
-
-  <div class="plan-row">
-    <div class="plan">
-      <p class="plan-name">Solo</p>
-      <p class="plan-price">$14<span>/mo</span></p>
-      <p class="card-text">One bag a month.</p>
-    </div>
-    <div class="plan plan-featured">
-      <p class="plan-name">Team</p>
-      <p class="plan-price">$38<span>/mo</span></p>
-      <p class="card-text">Three bags a month.</p>
-    </div>
-    <div class="plan">
-      <p class="plan-name">Office</p>
-      <p class="plan-price">$95<span>/mo</span></p>
-      <p class="card-text">Eight bags a month.</p>
-    </div>
-  </div>
-</section>
-"""
+CHALLENGE_DIR = Path(__file__).resolve().parent / 'challenge' / 'novacloud'
 
 
-# The stylesheet that ships with the broken page. Most of it is fine --
-# the player has to find the handful of declarations that are wrong.
-STARTER_CSS = """/* ---------- base ---------- */
-body {
-  margin: 0;
-  color: #292524;
-  background: #fdfbf7;
-  line-height: 1.5;
+def _read(name):
+    return (CHALLENGE_DIR / name).read_text(encoding='utf-8')
+
+
+# The broken page the player has to repair. Unlike earlier rounds this is a
+# complete HTML document -- the preview renders it as-is, swapping the
+# stylesheet link for the player's live CSS.
+STARTER_HTML = _read('index.html')
+STARTER_CSS = _read('style.css')
+
+# The intended result. Used by the tests (and by organisers) to prove the
+# challenge is solvable; never sent to the browser.
+SOLUTION_HTML = _read('solution.html')
+SOLUTION_CSS = _read('solution.css')
+
+
+# ----------------------------------------------------------------- fixes ----
+#
+# objective id -> the (broken, fixed) edits that clear it. Grouped edits
+# count as one objective: repairing the feature card means fixing both its
+# padding and its corner radius, and the stats band needs all four numbers.
+#
+# These are the *reference* answers. The checker accepts any equivalent
+# result, so this table is for the tests and for organisers -- not a
+# string comparison the player has to match.
+
+GRADED_CSS_FIXES = {
+    'css-line-height': (
+        ('  line-height: 1;\n  -webkit-font-smoothing',
+         '  line-height: 1.6;\n  -webkit-font-smoothing'),
+    ),
+    'css-navbar-row': (
+        ('.navbar {\n  display: block;', '.navbar {\n  display: flex;'),
+    ),
+    'css-nav-spacing': (
+        ('  gap: 2px;\n  flex: 1;\n  justify-content: flex-end;\n}',
+         '  gap: 32px;\n  flex: 1;\n  justify-content: center;\n}'),
+    ),
+    'css-hero-split': (
+        ('  display: grid;\n  grid-template-columns: 1fr;\n  align-items: center;\n  gap: 64px;',
+         '  display: grid;\n  grid-template-columns: 1fr 1fr;\n  align-items: center;\n  gap: 64px;'),
+    ),
+    'css-hero-title': (
+        ('.hero__title {\n  font-size: 1rem;',
+         '.hero__title {\n  font-size: clamp(2.4rem, 4.4vw, 3.6rem);'),
+    ),
+    'css-hero-gap': (
+        ('.hero__actions {\n  display: flex;\n  align-items: center;\n  gap: 150px;',
+         '.hero__actions {\n  display: flex;\n  align-items: center;\n  gap: 16px;'),
+    ),
+    'css-console': (
+        ('  overflow: hidden;\n  transform: rotate(45deg);',
+         '  overflow: hidden;\n  transform: rotate(1.2deg);'),
+    ),
+    'css-features': (
+        ('.features__grid {\n  display: grid;\n  grid-template-columns: repeat(1, 1fr);',
+         '.features__grid {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);'),
+    ),
+    'css-feature-box': (
+        ('  border-radius: 0;\n  padding: 4px;\n  transition: transform',
+         '  border-radius: var(--radius-md);\n  padding: 32px;\n  transition: transform'),
+    ),
+    'css-responsive': (
+        ('@media (min-width: 860px) {', '@media (max-width: 860px) {'),
+    ),
 }
 
-h2, h3 { margin: 0 0 10px; }
-p { margin: 0 0 12px; }
-
-/* ---------- header ---------- */
-.site-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 32px;
-  background: #ffffff;
-  border-bottom: 1px solid #ece3d7;
+GRADED_HTML_FIXES = {
+    'html-h1': (
+        ('          <h2 class="hero__title">\n'
+         '            Ship infrastructure at the\n'
+         '            <span class="hero__title-accent">speed of thought</span>\n'
+         '          </h2>',
+         '          <h1 class="hero__title">\n'
+         '            Ship infrastructure at the\n'
+         '            <span class="hero__title-accent">speed of thought</span>\n'
+         '          </h1>'),
+    ),
+    'html-nav-link': (
+        ('        <li><a href="#testimonials" class="navbar__link">Testimonials</a></li>\n      </ul>',
+         '        <li><a href="#testimonials" class="navbar__link">Testimonials</a></li>\n'
+         '        <li><a href="#faq" class="navbar__link">FAQ</a></li>\n      </ul>'),
+    ),
+    'html-feature-card': (
+        ('          <article>\n'
+         '            <div class="feature-card__icon" aria-hidden="true">\n'
+         '              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\n'
+         '                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>',
+         '          <article class="feature-card">\n'
+         '            <div class="feature-card__icon" aria-hidden="true">\n'
+         '              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\n'
+         '                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>'),
+    ),
+    'html-stats': (
+        ('data-count-to="12000">0<', 'data-count-to="12000">12,000<'),
+        ('data-count-to="99">0<', 'data-count-to="99">99<'),
+        ('data-count-to="14">0<', 'data-count-to="14">14<'),
+        ('data-count-to="6">0<', 'data-count-to="6">6<'),
+    ),
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 18px;
-}
+GRADED_FIXES = {**GRADED_CSS_FIXES, **GRADED_HTML_FIXES}
 
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: #b45309;
-  color: #ffffff;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-}
 
-.site-nav {
-  display: block;
-  gap: 24px;
-}
+def apply_fixes(source, fixes):
+    """Apply every (broken, fixed) pair to `source`, exactly once each.
 
-.site-nav a {
-  color: #57534e;
-  text-decoration: none;
-  font-size: 15px;
-}
+    `fixes` may be a flat sequence of pairs or a mapping of objective id ->
+    pairs. Raises if an anchor is missing or ambiguous, so a drifted
+    challenge file fails loudly instead of silently grading the wrong thing.
+    """
+    if isinstance(fixes, dict):
+        fixes = [pair for pairs in fixes.values() for pair in pairs]
 
-.site-nav a:hover { color: #b45309; }
-
-/* ---------- hero ---------- */
-.hero {
-  padding: 72px 24px 56px;
-  text-align: centre;
-  background: linear-gradient(180deg, #fff8ef, #fdfbf7);
-}
-
-.hero-title {
-  font-size: 12px;
-  margin: 0 0 14px;
-  letter-spacing: -0.5px;
-}
-
-.hero-text {
-  max-width: 540px;
-  margin: 0 auto 26px;
-  color: #57534e;
-}
-
-.hero-shot {
-  width: 100%;
-  max-width: 360px;
-  margin-top: 32px;
-}
-
-/* ---------- buttons ---------- */
-.btn {
-  display: inline-block;
-  padding: 13px 28px;
-  border: none;
-  border-radius: 999px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  background-color: #b45309;
-  color: #b45309;
-}
-
-.btn:hover { background-color: #92400e; }
-
-/* ---------- sections ---------- */
-.section {
-  padding: 56px 32px;
-  max-width: 1040px;
-  margin: 0 auto;
-}
-
-.section-alt { background: #fffaf3; max-width: none; }
-
-.section-title { font-size: 28px; }
-.section-sub { color: #78716c; margin-bottom: 28px; }
-
-/* ---------- cards ---------- */
-.card-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 20px;
-}
-
-.card {
-  background: #ffffff;
-  border: 1px solid #efe6d9;
-  border-radius: 16px;
-  padding: 22px;
-}
-
-.card-icon { font-size: 24px; }
-.card-title { font-size: 18px; }
-.card-text { color: #78716c; margin: 0; }
-.card-price { font-weight: 700; margin-top: 12px; }
-
-/* ---------- plans ---------- */
-.plan-row {
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
-}
-
-.plan {
-  flex: 1 1 220px;
-  border: 1px solid #efe6d9;
-  border-radius: 16px;
-  padding: 22px;
-  background: #ffffff;
-}
-
-.plan-featured { border-color: #b45309; }
-.plan-name { text-transform: uppercase; letter-spacing: 1px; font-size: 12px; color: #a8a29e; }
-.plan-price { font-size: 30px; font-weight: 700; margin: 0 0 10px; }
-.plan-price span { font-size: 14px; font-weight: 400; color: #a8a29e; }
-
-/* ---------- footer ---------- */
-.site-footer {
-  padding: 28px 32px;
-  text-align: center;
-  color: #78716c;
-  border-top: 1px solid #ece3d7;
-}
-
-/* ---------- responsive ---------- */
-@media (max-width: 720px) {
-  .card-grid { grid-template-columns: repeat(3, 1fr); }
-  .site-header { flex-direction: column; gap: 12px; }
-  .hero { padding: 48px 18px; }
-}
-"""
+    for broken, fixed in fixes:
+        if source.count(broken) != 1:
+            raise ValueError(f'fix anchor is not unique: {broken!r}')
+        source = source.replace(broken, fixed, 1)
+    return source

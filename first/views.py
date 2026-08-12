@@ -5,9 +5,13 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .checks import TOTAL_CHECKS, run_checks
+from .checks import CSS_CHECKS, HTML_CHECKS, TOTAL_CHECKS, run_checks
 from .game_config import (
+    DIFFICULTY,
     GAME_DURATION_SECONDS,
+    ROUND_NUMBER,
+    SITE_NAME,
+    SITE_TAGLINE,
     STARTER_CSS,
     STARTER_HTML,
     TIMER_DANGER_SECONDS,
@@ -16,8 +20,20 @@ from .game_config import (
 )
 from .models import CssRule, User
 
-# Generous ceiling; the challenge page is ~6 KB of HTML and ~4 KB of CSS.
+# Generous ceiling; the challenge page is ~12 KB of HTML and ~11 KB of CSS.
 MAX_SUBMISSION_CHARS = 200_000
+
+# Everything the templates need to name the current round in one place.
+CHALLENGE = {
+    'round': ROUND_NUMBER,
+    'site': SITE_NAME,
+    'tagline': SITE_TAGLINE,
+    'difficulty': DIFFICULTY,
+    'minutes': GAME_DURATION_SECONDS // 60,
+    'objectives': TOTAL_CHECKS,
+    'css_objectives': CSS_CHECKS,
+    'html_objectives': HTML_CHECKS,
+}
 
 
 def _ensure_session(request):
@@ -32,6 +48,23 @@ def _get_submission(user):
         defaults={'html': STARTER_HTML, 'css': STARTER_CSS},
     )
     return submission
+
+
+def _record_progress(user, passed):
+    """Persist a new personal best, and completion once every objective is met.
+
+    Completion is only awarded while the session is still live: running out of
+    time closes the round whatever the last submission scores.
+    """
+    fields = []
+    if passed > user.best_score:
+        user.best_score = passed
+        fields.append('best_score')
+    if passed == TOTAL_CHECKS and not user.completed_at and not user.is_expired:
+        user.completed_at = timezone.now()
+        fields.append('completed_at')
+    if fields:
+        user.save(update_fields=fields)
 
 
 def _state(user):
@@ -51,17 +84,14 @@ def _state(user):
 def intro(request):
     """Game home page."""
     _ensure_session(request)
-    return render(request, 'intro.html', {
-        'duration_minutes': GAME_DURATION_SECONDS // 60,
-        'total_checks': TOTAL_CHECKS,
-    })
+    return render(request, 'intro.html', {'challenge': CHALLENGE})
 
 
 def start(request):
     """Short 'booting the arena' transition between auth and the challenge."""
     if not request.user.is_authenticated:
         return redirect('login')
-    return render(request, 'start.html')
+    return render(request, 'start.html', {'challenge': CHALLENGE})
 
 
 def home(request):
@@ -73,9 +103,14 @@ def home(request):
     request.user.start_challenge()
     submission = _get_submission(request.user)
 
-    state = _state(request.user)
+    # Grade what is on disk before rendering. Autosaved work that the player
+    # never explicitly ran the checks on still counts -- otherwise the end of
+    # round summary can disagree with the ticks in the objectives panel.
     checks = run_checks(submission.html, submission.css)
     passed = sum(1 for check in checks if check['passed'])
+    _record_progress(request.user, passed)
+
+    state = _state(request.user)
 
     return render(request, 'entry.html', {
         'html': submission.html,
@@ -83,6 +118,7 @@ def home(request):
         'state': state,
         'checks': checks,
         'passed': passed,
+        'challenge': CHALLENGE,
         'arena': {
             'state': state,
             'timer': {
@@ -206,16 +242,7 @@ def api_check(request):
 
     checks = run_checks(html, css)
     passed = sum(1 for check in checks if check['passed'])
-
-    fields = []
-    if passed > user.best_score:
-        user.best_score = passed
-        fields.append('best_score')
-    if passed == TOTAL_CHECKS and not user.completed_at:
-        user.completed_at = timezone.now()
-        fields.append('completed_at')
-    if fields:
-        user.save(update_fields=fields)
+    _record_progress(user, passed)
 
     payload = _state(user)
     payload['checks'] = checks

@@ -3,12 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Website Fixer — 30 minute HTML &amp; CSS repair challenge</title>
+  <title>Website Fixer — Round {{ challenge.round }} · {{ challenge.site }}</title>
   <link rel="stylesheet" href="{% static 'css/wf-base.css' %}">
   <link rel="stylesheet" href="{% static 'css/wf-home.css' %}">
 </head>
 <body class="wf-body">
+
 <div class="wf-page">
+  <div class="wf-blobs" aria-hidden="true">
+    <span class="wf-blob wf-blob--a"></span>
+    <span class="wf-blob wf-blob--b"></span>
+    <span class="wf-blob wf-blob--c"></span>
+  </div>
+
+  <div class="wf-glyphs" aria-hidden="true">
+    <span style="--x: 6%;  --d: 0s;    --s: 26px">&lt;/&gt;</span>
+    <span style="--x: 22%; --d: 1.7s;  --s: 20px">{ }</span>
+    <span style="--x: 48%; --d: 3.1s;  --s: 22px">#</span>
+    <span style="--x: 71%; --d: 0.9s;  --s: 24px">;</span>
+    <span style="--x: 88%; --d: 2.4s;  --s: 20px">&lt;/&gt;</span>
+  </div>
 
   <div class="wf-shell">
     <header class="wf-topbar">
@@ -16,7 +30,7 @@
         <span class="wf-brand__mark">WF</span>
         <span>
           Website Fixer
-          <span class="wf-brand__sub">Coding challenge</span>
+          <span class="wf-brand__sub">Round {{ challenge.round }} · {{ challenge.site }}</span>
         </span>
       </a>
 
@@ -36,17 +50,20 @@
   </div>
 
   <main class="wf-shell">
+
+    <!-- ===================== HERO ===================== -->
     <section class="wf-hero">
       <div class="wf-rise">
-        <span class="wf-badge wf-badge--accent">Round 01 · Pixel Perk</span>
+        <span class="wf-badge wf-badge--accent">Round {{ challenge.round }} · {{ challenge.site }}</span>
 
         <h1 class="wf-hero__title">Website<br><span>Fixer</span></h1>
 
+        <p class="wf-hero__kicker">Repair the code. Beat the clock.</p>
+
         <p class="wf-hero__lead">
-          A coffee brand's landing page shipped broken. The nav collapsed, the button text
-          turned invisible, the grid forgot how to grid, and the footer never made it at all.
-          You get <strong>{{ duration_minutes }} minutes</strong> and
-          <strong>{{ total_checks }} objectives</strong> to put it back together with HTML and CSS.
+          {{ challenge.site }} is a polished {{ challenge.tagline }} that shipped with broken
+          HTML and CSS. <strong>The website is already built.</strong> Your job is to find what
+          went wrong, fix it, and restore the page before time runs out.
         </p>
 
         <div class="wf-cta-row">
@@ -58,95 +75,201 @@
           {% endif %}
         </div>
 
-        <p class="wf-cta-note">Runs in the browser. Your clock starts the moment the arena opens.</p>
+        <p class="wf-cta-note">
+          Runs in the browser. Nothing to install. Your clock starts the moment the arena opens.
+        </p>
       </div>
 
-      <div class="wf-card wf-window wf-rise" aria-hidden="true">
+      <!-- decorative editor -->
+      <div class="wf-card wf-window wf-rise wf-rise--2" aria-hidden="true">
         <div class="wf-window__bar">
           <span class="wf-window__dot"></span>
           <span class="wf-window__dot"></span>
           <span class="wf-window__dot"></span>
-          <span class="wf-window__name">style.css — 4 problems</span>
+          <span class="wf-window__name">style.css</span>
+          <span class="wf-window__flag">{{ challenge.objectives }} objectives</span>
         </div>
-        <pre class="wf-code"><span class="c-sel">.site-nav</span> {
-  <span class="c-prop">display</span>: <span class="c-bad">block</span>;   <span class="c-note">/* links stacked */</span>
+        <pre class="wf-code"><span class="c-sel">.navbar</span> {
+  <span class="c-prop">display</span>: <span class="c-bad">block</span>;      <span class="c-note">/* header stacked */</span>
 }
 
-<span class="c-sel">.hero</span> {
-  <span class="c-prop">text-align</span>: <span class="c-bad">centre</span>;  <span class="c-note">/* not a value */</span>
+<span class="c-sel">.hero__title</span> {
+  <span class="c-prop">font-size</span>: <span class="c-bad">1rem</span>;     <span class="c-note">/* that's body copy */</span>
 }
 
-<span class="c-sel">.btn</span> {
-  <span class="c-prop">background-color</span>: #b45309;
-  <span class="c-prop">color</span>: <span class="c-bad">#b45309</span>;   <span class="c-note">/* invisible label */</span>
+<span class="c-sel">.hero__actions</span> {
+  <span class="c-prop">display</span>: <span class="c-ok">flex</span>;
+  <span class="c-prop">gap</span>: <span class="c-bad">150px</span>;         <span class="c-note">/* buttons adrift */</span>
 }
 
-<span class="c-sel">.card-grid</span> {
-  <span class="c-prop">grid-template-columns</span>: <span class="c-bad">1fr</span>;
+<span class="c-sel">.console</span> {
+  <span class="c-prop">transform</span>: <span class="c-bad">rotate(45deg)</span>;
 }</pre>
         <div class="wf-window__foot">
-          <span>Live preview, sandboxed</span>
-          <span><b>30:00</b> on the clock</span>
+          <span>Live preview · sandboxed</span>
+          <span><b>{{ challenge.minutes }}:00</b> on the clock</span>
         </div>
       </div>
     </section>
 
+    <!-- ===================== STATS ===================== -->
     <section class="wf-stats">
-      <div class="wf-card wf-stat">
+      <div class="wf-card wf-stat wf-stat--purple">
         <div class="wf-stat__label">Time</div>
-        <div class="wf-stat__value">{{ duration_minutes }} <small>MIN</small></div>
+        <div class="wf-stat__value">{{ challenge.minutes }} <small>MIN</small></div>
       </div>
-      <div class="wf-card wf-stat">
+      <div class="wf-card wf-stat wf-stat--cyan">
         <div class="wf-stat__label">Difficulty</div>
-        <div class="wf-stat__value">BASIC</div>
+        <div class="wf-stat__value">{{ challenge.difficulty|upper }}</div>
       </div>
-      <div class="wf-card wf-stat">
+      <div class="wf-card wf-stat wf-stat--pink">
         <div class="wf-stat__label">Mode</div>
         <div class="wf-stat__value">HTML <small>+</small> CSS</div>
       </div>
-      <div class="wf-card wf-stat">
+      <div class="wf-card wf-stat wf-stat--yellow">
         <div class="wf-stat__label">Objectives</div>
-        <div class="wf-stat__value">{{ total_checks }}</div>
+        <div class="wf-stat__value">{{ challenge.objectives }}</div>
       </div>
     </section>
 
+    <!-- ================= CHALLENGE CARD ================= -->
+    <section class="wf-section" id="round">
+      <div class="wf-card wf-round">
+        <div class="wf-round__body">
+          <span class="wf-round__no">Round {{ challenge.round }}</span>
+          <h2 class="wf-round__title">{{ challenge.site }}</h2>
+          <p class="wf-round__text">
+            Repair a broken {{ challenge.tagline }} using HTML and CSS. The header collapsed,
+            the headline shrank to body size, the deploy console fell over, the feature grid
+            forgot how to grid and the mobile breakpoint does the opposite of what it should.
+          </p>
+
+          <p class="wf-round__note">
+            The stylesheet ships with plenty wrong. Only the
+            <b>{{ challenge.objectives }} objectives</b> listed in the arena are scored —
+            fix those and you win.
+          </p>
+
+          <ul class="wf-round__meta">
+            <li><span>Time</span><b>{{ challenge.minutes }} min</b></li>
+            <li><span>Difficulty</span><b>{{ challenge.difficulty }}</b></li>
+            <li><span>Objectives</span><b>{{ challenge.objectives }}</b></li>
+            <li><span>Split</span><b>{{ challenge.css_objectives }} CSS · {{ challenge.html_objectives }} HTML</b></li>
+          </ul>
+
+          <div class="wf-cta-row">
+            {% if request.user.is_authenticated %}
+              <a class="wf-btn wf-btn--primary" href="/start/">Enter the arena →</a>
+            {% else %}
+              <a class="wf-btn wf-btn--primary" href="/signup/">Start challenge →</a>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="wf-round__art" aria-hidden="true">
+          <div class="wf-mock">
+            <div class="wf-mock__bar"><span></span><span></span><span></span></div>
+            <div class="wf-mock__nav"><i></i><i></i><i></i></div>
+            <div class="wf-mock__hero"></div>
+            <div class="wf-mock__grid"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+          <span class="wf-mock__stamp">BROKEN</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================== WHAT YOU FIX ================== -->
+    <section class="wf-section" id="fix">
+      <h2 class="wf-section__title">What you'll fix</h2>
+      <p class="wf-section__sub">
+        {{ challenge.objectives }} objectives, all of them visible in the live preview.
+        No JavaScript, no frameworks, no build step.
+      </p>
+
+      <div class="wf-tiles">
+        <div class="wf-card wf-tile wf-tile--purple">
+          <span class="wf-tile__icon">🧭</span>
+          <h3>Navigation</h3>
+          <p>Put the brand, the menu and the buttons back on one line.</p>
+        </div>
+        <div class="wf-card wf-tile wf-tile--blue">
+          <span class="wf-tile__icon">🚀</span>
+          <h3>Hero</h3>
+          <p>Restore the headline size, the two-column split and the console that fell over.</p>
+        </div>
+        <div class="wf-card wf-tile wf-tile--cyan">
+          <span class="wf-tile__icon">▦</span>
+          <h3>Grid</h3>
+          <p>Get the six feature cards back into their intended three-column layout.</p>
+        </div>
+        <div class="wf-card wf-tile wf-tile--pink">
+          <span class="wf-tile__icon">↔</span>
+          <h3>Spacing</h3>
+          <p>Two gaps are wrong in opposite directions — one huge, one invisible.</p>
+        </div>
+        <div class="wf-card wf-tile wf-tile--orange">
+          <span class="wf-tile__icon">📱</span>
+          <h3>Responsive</h3>
+          <p>One media query is doing the exact opposite of what a phone needs.</p>
+        </div>
+        <div class="wf-card wf-tile wf-tile--green">
+          <span class="wf-tile__icon">&lt;/&gt;</span>
+          <h3>Markup</h3>
+          <p>A missing heading level, a missing link, a missing class and four missing numbers.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= HOW IT PLAYS ================== -->
     <section class="wf-section" id="how">
-      <h2 class="wf-section__title">How a round plays out</h2>
+      <h2 class="wf-section__title">How the round works</h2>
       <p class="wf-section__sub">Three steps, no setup, nothing to install.</p>
 
       <div class="wf-steps">
-        <div class="wf-card wf-step">
-          <div class="wf-step__no">1</div>
-          <h3>Claim your PC</h3>
-          <p>Sign in with the PC number you were given. Your progress and your clock follow that account.</p>
+        <div class="wf-card wf-step wf-step--1">
+          <div class="wf-step__no">01</div>
+          <h3>Enter</h3>
+          <p>Sign in with your PC number and open the arena. Your clock and your progress follow that account.</p>
         </div>
-        <div class="wf-card wf-step">
-          <div class="wf-step__no">2</div>
-          <h3>Fix the page</h3>
-          <p>Edit HTML and CSS side by side and watch the live preview update as you type.</p>
+        <div class="wf-card wf-step wf-step--2">
+          <div class="wf-step__no">02</div>
+          <h3>Fix</h3>
+          <p>Edit the existing HTML and CSS side by side and watch {{ challenge.site }} update live as you type.</p>
         </div>
-        <div class="wf-card wf-step">
-          <div class="wf-step__no">3</div>
-          <h3>Run the checks</h3>
-          <p>Hit <em>Run checks</em> whenever you like. Clear all {{ total_checks }} objectives before 00:00 to win.</p>
+        <div class="wf-card wf-step wf-step--3">
+          <div class="wf-step__no">03</div>
+          <h3>Win</h3>
+          <p>Hit <em>Run checks</em> whenever you like. Clear all {{ challenge.objectives }} objectives before 00:00.</p>
         </div>
       </div>
     </section>
 
+    <!-- =================== HOUSE RULES ================== -->
     <section class="wf-section">
       <h2 class="wf-section__title">House rules</h2>
       <p class="wf-section__sub">Everything you need is on screen.</p>
 
       <div class="wf-card">
         <ul class="wf-rules">
-          <li>The clock is {{ duration_minutes }} minutes and runs on the server — refreshing will not buy you more.</li>
+          <li>You are <b>repairing</b> a finished page — you never build {{ challenge.site }} from scratch.</li>
+          <li>The clock is {{ challenge.minutes }} minutes and runs on the server — refreshing will not buy you more.</li>
           <li>Your page renders in a sandbox, so your CSS can never touch the game interface.</li>
           <li>Autosave keeps your work; you can leave and come back inside the time limit.</li>
           <li>Objectives are plain HTML and CSS fixes — no JavaScript required.</li>
-          <li>Hints for every objective are listed beside the preview.</li>
+          <li>Every objective has three hints, revealed one at a time when you ask.</li>
           <li>Stuck? Reset puts the original broken page back without resetting the clock.</li>
         </ul>
       </div>
+    </section>
+
+    <section class="wf-final">
+      <h2>Ready when you are.</h2>
+      <p>{{ challenge.minutes }} minutes. {{ challenge.objectives }} objectives. One broken website.</p>
+      {% if request.user.is_authenticated %}
+        <a class="wf-btn wf-btn--primary wf-btn--lg" href="/start/">Enter the arena →</a>
+      {% else %}
+        <a class="wf-btn wf-btn--primary wf-btn--lg" href="/signup/">Start challenge →</a>
+      {% endif %}
     </section>
   </main>
 

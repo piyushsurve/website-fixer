@@ -1,8 +1,13 @@
 # Website Fixer
 
-A timed HTML/CSS repair game. The player is handed a deliberately broken
-landing page ("Pixel Perk") and has **30 minutes** to clear **14 objectives**
-by editing HTML and CSS in the browser.
+A timed HTML/CSS **repair** game. Round 01 hands the player a finished
+cloud-platform landing page ("NovaCloud") that shipped broken, and gives them
+**30 minutes** to clear **14 objectives** by fixing the existing HTML and CSS
+in the browser.
+
+Nobody builds NovaCloud. The markup, the copy, the sections and the design
+system are all already there; ten CSS declarations and four bits of markup are
+wrong, and every one of them is visible in the live preview.
 
 Django 5 + Django Channels (ASGI). No frontend framework.
 
@@ -37,7 +42,8 @@ daphne -b 127.0.0.1 -p 8000 games.asgi:application
 
 | Area | Where |
 | --- | --- |
-| Challenge content + duration | `first/game_config.py` |
+| Challenge files (the site itself) | `first/challenge/novacloud/` |
+| Round metadata + duration + fix table | `first/game_config.py` |
 | Objective checking | `first/checks.py` |
 | Views / API | `first/views.py`, `games/urls.py` |
 | Presence store | `first/presence.py` |
@@ -46,6 +52,79 @@ daphne -b 127.0.0.1 -p 8000 games.asgi:application
 
 Flow: `/` (home) → `/signup/` or `/login/` → `/start/` (launch screen) →
 `/home/` (arena) → success or timeout.
+
+### The challenge is four files
+
+```
+first/challenge/novacloud/
+  index.html      the broken page handed to the player
+  style.css       the broken stylesheet handed to the player
+  solution.html   the page with every objective fixed
+  solution.css    the organisers' gold standard
+```
+
+`index.html` is a **complete HTML document**, not a fragment. The preview
+renders it as written and swaps its `<link rel="stylesheet">` for the player's
+live CSS (`previewDocument()` in `static/js/wf-arena.js`).
+
+`solution.*` is never served to a browser — `ArenaPageTests` asserts that the
+answers do not appear in the arena HTML.
+
+### 38 defects, 14 objectives
+
+`style.css` ships with **38 deliberate defects**; only **14 are graded**. The
+rest are visual noise: squashed pricing cards, a four-column footer, cropped
+avatars. A player may fix them or ignore them, and the arena says so plainly.
+
+`GRADED_CSS_FIXES` / `GRADED_HTML_FIXES` in `first/game_config.py` are the
+authoritative list of what is scored — objective id to the `(broken, fixed)`
+edits that clear it. Grouped edits count as one objective: the feature card
+needs both its padding and its radius, the stats band needs all four numbers.
+`apply_fixes()` raises if an anchor is missing or ambiguous, so a drifted
+challenge file fails the suite loudly rather than grading the wrong thing.
+
+One defect from the organisers' `style.css` is deliberately **not** shipped:
+`.hero__glow { position: static }` puts a 900×900 decorative div into normal
+flow, opening a 900px void that pushes the hero headline from 715px to 1615px.
+Four of the fourteen objectives live in that hero, so the defect hides the
+round rather than decorating it.
+
+To swap in a different site: replace the four files, update the two fix tables,
+and point the checks in `first/checks.py` at the new selectors. Nothing in the
+views, templates or JS knows what the challenge is.
+
+### The objectives
+
+14 objectives: **10 CSS, 4 HTML**. They are graded on *outcome*, not on text —
+whitespace, property order, comments and equivalent answers (`flex` vs
+`inline-flex`, `56px` vs `clamp(...)`, `repeat(3, 1fr)` vs `auto-fit`, a
+literal `16px` vs the `--radius-md` token) all pass. Each objective carries a
+description plus **three hints** that the player unlocks one at a time: what
+looks wrong, which concept is involved, and finally which property in which
+rule.
+
+Two objectives interact, on purpose. The reversed breakpoint
+(`@media (min-width: 860px)`) applies the entire phone stylesheet to desktop,
+which overrides the hero's column count — so fixing `css-hero-split` shows no
+visual change until `css-responsive` is fixed too. Both are graded
+independently and the hint for the first one says so.
+
+### JavaScript
+
+The page ships without any. The supplied markup references a `script.js` that
+would have driven the theme toggle, the FAQ accordion, the mobile menu and a
+stat counter; the preview sandbox blocks scripts, so that tag is removed and
+the four headline numbers live in the markup instead of only in their
+`data-count-to` attributes — which is the `html-stats` objective. The
+stylesheet's `.reveal` rules are dead code: the markup never uses that class.
+
+### Why the preview is scaled
+
+`fitPreview()` in `static/js/wf-arena.js` renders the iframe at a fixed 1120px
+virtual width and scales it down to the panel. Sizing the iframe to the panel
+instead would put NovaCloud permanently inside its own 860px breakpoint and
+hide the desktop-only mistakes. The **Phone** toggle switches to a 390px
+virtual width.
 
 ### The 30 minute timer
 
@@ -135,9 +214,14 @@ created before this version already carry a `game_start_time`, so their clock
 looks expired — clear that field in `/admin/` (or set `completed_at` back to
 empty) to hand a player a fresh 30 minutes.
 
-`python manage.py test first` runs the regression suite: it asserts the shipped
-page fails all 14 objectives, the intended fix passes all 14, and the clock
-cannot be restarted or beaten.
+`python manage.py test` runs the regression suite (36 tests). It asserts that
+the shipped page fails all 14 objectives, that both the gold standard *and* a
+graded-fixes-only submission pass all 14, that each individual fix clears
+exactly one objective and no others, that equivalent beginner answers are
+accepted, that the FAQ icon's legitimate `rotate(45deg)` is never mistaken for
+the console's, that the answers never reach the browser, that the clock cannot
+be restarted or beaten, and that the presence socket counts one browser session
+as one player however many tabs it opens.
 
 ## Testing the player count by hand
 

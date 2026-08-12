@@ -1,11 +1,12 @@
 from django.contrib import admin
 from django.urls import path
-from first import views  # adjust 'first' to your app name
+
+from first import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # Intro page (default landing)
+    # Game home page
     path('', views.intro, name='intro'),
 
     # Auth routes
@@ -14,7 +15,13 @@ urlpatterns = [
     path('logout/', views.user_logout, name='logout'),
 
     # Game routes
+    path('start/', views.start, name='start'),
     path('home/', views.home, name='home'),
+
+    # Arena API
     path('save-css/', views.save_css, name='save_css'),
     path('get-css/', views.get_css, name='get_css'),
+    path('api/state/', views.api_state, name='api_state'),
+    path('api/check/', views.api_check, name='api_check'),
+    path('api/reset/', views.api_reset, name='api_reset'),
 ]

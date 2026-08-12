@@ -459,134 +459,173 @@ def _check_responsive(dom, rules):
 
 
 # id, group, title, description, (hint 1, hint 2, hint 3), function
+#
+# Hints narrow the search in three steps, so a player can stop at any level:
+#   1  the idea            -- what kind of CSS this is, no selector, no property
+#   2  where to look       -- the rule(s) involved, so nobody reads 1278 lines
+#   3  which property      -- the property and which way it is wrong, not the
+#                             finished declaration
+#
+# Two objectives are overridden by the misfiring 860px breakpoint while it is
+# still broken (measured: the hero keeps a single 1072px track, and the menu is
+# opacity:0 / position:fixed with a 4px gap). Their hints say so, without
+# giving away how to fix the breakpoint.
 _DEFINITIONS = [
     ('css-line-height', 'css', 'Body text has readable line spacing',
      'Paragraph lines should not be touching each other.',
-     ('Every paragraph on the page is set solid — the lines are jammed together '
-      'with no breathing room.',
-      'One declaration in the body rule controls the space between lines of text.',
-      'Look at line-height in the body rule. A value of 1 means "no leading at '
-      'all"; body copy usually wants about 1.6.'),
+     ('Every paragraph is set solid — the lines of text sit right on top of one '
+      'another. This is about the spacing *within* a block of text, not the '
+      'spacing between elements.',
+      'It affects text everywhere, so it comes from the `body` rule at the top '
+      'of the stylesheet.',
+      'Check `line-height` on `body`. A value of `1` gives each line exactly the '
+      'height of the font and nothing more; comfortable body copy needs around '
+      'one and a half times that.'),
      _check_line_height),
 
     ('css-navbar-row', 'css', 'The header lays out in a row',
      'The logo, the menu and the buttons should sit on one line across the top.',
-     ('The header is three stacked blocks — brand, then menu, then buttons — '
-      'instead of one bar.',
-      'The .navbar rule already sets justify-content and gap, and those only do '
-      'anything in one layout mode.',
-      'Check the display property on .navbar.'),
+     ('The logo, the navigation and the action buttons should share one '
+      'horizontal line. Right now each one starts on a new line — which is '
+      'simply what block-level elements do.',
+      'Look at the `.navbar` rule, in the navbar section of the stylesheet.',
+      'That rule already sets `justify-content`, `align-items` and `gap`, and '
+      'none of those do anything unless the container uses a layout mode built '
+      'for arranging children in a row. Check its `display` property.'),
      _check_navbar_row),
 
     ('css-nav-spacing', 'css', 'Nav links are spaced and centered',
      'The menu links belong in the middle of the header with room between them.',
-     ('The nav links are crammed together and shoved over to one side.',
-      'Two properties in the same rule are wrong: one controls the space between '
-      'the links, the other controls where the group sits.',
-      'In .navbar__menu, fix gap (2px is far too tight) and justify-content.'),
+     ('The menu links need comfortable, even spacing, and the group should sit '
+      'in the middle of the header rather than being pushed to one side.',
+      'Look at `.navbar__menu`.',
+      'Check `gap` and `justify-content`. One sets the distance between the '
+      'links, the other decides where the group sits along the row. '
+      'Note: while the phone styles are still being applied to desktop, this '
+      'menu is hidden, so your change may not show up on screen yet — the '
+      'responsive objective covers that.'),
      _check_nav_spacing),
 
     ('css-hero-split', 'css', 'The hero is a two-column layout',
      'The hero copy and the deploy console should sit side by side on desktop.',
-     ('The hero text and the deploy console are stacked in a single column '
-      'instead of sitting next to each other.',
-      '.hero__container is already a grid — it has just been told how many '
-      'columns to create. (The phone breakpoint overrides this one, so you may '
-      'not see it change until that is fixed too.)',
-      'Set grid-template-columns on .hero__container to two columns.'),
+     ('The hero text and the deployment console are meant to sit next to each '
+      'other on a desktop screen, instead of stacking one above the other.',
+      'Look at `.hero__container` in the hero section.',
+      'It is already a grid, so check `grid-template-columns`. The declaration '
+      'defines a single track where the desktop design needs two. '
+      'Note: the phone breakpoint sets this same property, and while that '
+      'breakpoint is misfiring it will win over your change — if nothing moves, '
+      'the responsive objective is why.'),
      _check_hero_split),
 
     ('css-hero-title', 'css', 'The hero headline is headline-sized',
      'The main headline should be the largest text on the page.',
-     ('The headline is no bigger than the paragraph underneath it.',
-      'Something set the headline to roughly body-copy size.',
-      'Fix font-size in .hero__title — the design uses a clamp() that tops out '
-      'around 3.6rem.'),
+     ('The main headline should obviously be the most prominent text in the '
+      'hero. At the moment it is no bigger than the paragraph below it.',
+      'Look at `.hero__title`.',
+      'Check its `font-size`. `1rem` is the browser\'s ordinary body-text size — '
+      'a hero headline wants to be several times that. The other large headings '
+      'in this stylesheet use `clamp()` if you want to match the house style.'),
      _check_hero_title),
 
     ('css-hero-gap', 'css', 'The hero buttons sit together',
      'The two call-to-action buttons should be next to each other, not far apart.',
-     ('There is a huge empty gulf between "Start deploying free" and "Watch a 90s '
-      'demo".',
-      'Flex containers control the space between their children with one property.',
-      'The gap on .hero__actions is far too large — the rest of the design uses '
-      '16px.'),
+     ('The two hero buttons should read as one pair of actions. Right now they '
+      'are marooned at opposite ends of the row.',
+      'Look at `.hero__actions`.',
+      'Check the `gap`. It is the property that sets the space between a flex '
+      'container\'s children, and this value is far larger than the spacing used '
+      'anywhere else in the design.'),
      _check_hero_gap),
 
     ('css-console', 'css', 'The deploy console sits straight',
      'The dark console panel in the hero should be almost level.',
-     ('The console panel is tipped over at a wild angle and swamps the top of '
-      'the page.',
-      'Something is rotating that one element. The design does tilt it, but only '
-      'very slightly.',
-      'Fix the transform on .console — it should be about 1 degree, not 45.'),
+     ('The dark deployment console should sit very nearly level. The design does '
+      'tilt it, but only just enough to notice.',
+      'Look at the `.console` rule — the panel itself. Careful if you search: '
+      '`rotate(45deg)` appears three times in this stylesheet. The other two '
+      'turn the FAQ\'s + into a x and the menu button into a cross, and both '
+      'of those are correct. Only the one on `.console` is wrong.',
+      'Check the `transform` on `.console`. The angle inside its `rotate()` is '
+      'doing all the damage; the design only wants a degree or so of tilt.'),
      _check_console_upright),
 
     ('css-stats-band', 'css', 'The statistics band is a centered 4-column row',
      'The four headline figures should sit in one centered row.',
-     ('The four statistics are in a 2x2 block and every number hugs the left edge '
-      'of its card.',
-      'Two rules are involved: one decides how many columns the band has, the '
-      'other how the text sits inside each card.',
-      'Set grid-template-columns on .stats__grid to four columns, and text-align '
-      'on .stat-card to center.'),
+     ('There are four statistics. They should sit in a single balanced row, with '
+      'each figure centred inside its own card — instead of wrapping into a '
+      'block with everything shoved against the left edge.',
+      'Two rules are involved: `.stats__grid` for the row itself, and '
+      '`.stat-card` for the text inside each card.',
+      'On `.stats__grid`, check `grid-template-columns` — the number of tracks '
+      'should match the number of statistics. On `.stat-card`, check '
+      '`text-align`.'),
      _check_stats_band),
 
     ('css-features', 'css', 'Feature cards form a 3-column grid',
      'The six feature cards should sit three across on a desktop screen.',
-     ('The six feature cards are stacked in one very long column.',
-      'The container is already a grid — check how many columns it asks for.',
-      'Set grid-template-columns on .features__grid to three columns.'),
+     ('The six feature cards should spread across the page in rows, rather than '
+      'running down it in one long single-file column.',
+      'Look at `.features__grid`.',
+      'Check `grid-template-columns`. The declaration currently creates only one '
+      'column; this design puts these cards three across.'),
      _check_features_grid),
 
     ('css-feature-box', 'css', 'Feature cards look like cards',
      'Each feature card needs inner spacing and rounded corners.',
-     ('The feature cards have square corners and their text is pressed right up '
-      'against the border.',
-      'Two properties in the same rule: one controls the space inside the card, '
-      'the other its corners.',
-      'In .feature-card, fix padding (4px is far too tight) and border-radius — '
-      'the design system has a --radius-md token for exactly this.'),
+     ('The feature cards need breathing room inside them and softened corners. '
+      'At the moment the text is pressed right up against a hard square border.',
+      'Look at `.feature-card`.',
+      'Check its `padding` and its `border-radius`: one sets the space between '
+      'the card\'s border and its contents, the other the corner shape. The '
+      'stylesheet defines `--radius-*` tokens near the top if you want the '
+      'design\'s own value.'),
      _check_feature_box),
 
     ('css-feature-icon', 'css', 'Feature icons are square tiles',
      'Each feature icon should sit in a small square, not a stretched bar.',
-     ('The little coloured icon tiles are stretched into wide bars across the '
-      'top of every feature card.',
-      'The tile is meant to be as wide as it is tall. One of those two numbers '
-      'is wrong.',
-      'The height on .feature-card__icon is 48px. Make the width match it.'),
+     ('The small coloured icon tiles should be compact squares. Right now they '
+      'are stretched into wide bars across the top of every feature card.',
+      'Look at `.feature-card__icon`.',
+      'Compare its `width` with its `height`. The tile is meant to be as wide as '
+      'it is tall, and one of the two is dramatically larger than the other.'),
      _check_feature_icon),
 
     ('css-steps', 'css', 'The three steps sit in a padded 3-column row',
      'The workflow section has three steps and they need room to breathe.',
-     ('The three step cards are squeezed into three quarters of the row, and '
-      'their text is jammed against the card edges.',
-      'Two rules: one sets how many columns the row has (there are three steps, '
-      'not four), the other the space inside each card.',
-      'Set grid-template-columns on .steps to three columns, and give .step its '
-      'padding back — the other cards use about 32px.'),
+     ('There are three workflow steps. They should fill the row evenly, and each '
+      'card needs space inside it — right now they are squeezed into part of the '
+      'row with their text jammed against the edges.',
+      'Two rules are involved: `.steps` for the row, and `.step` for the '
+      'individual cards.',
+      'On `.steps`, check `grid-template-columns` — count the steps and compare '
+      'that with the number of tracks. On `.step`, check `padding`; the other '
+      'cards in this design use roughly 30px.'),
      _check_steps),
 
     ('css-pricing', 'css', 'Pricing cards are spaced and the featured one stands out',
      'The three plans need space between them, and "Growth" should be the biggest.',
-     ('The three pricing cards are glued together, and the highlighted "Most '
-      'popular" plan is smaller than the two beside it.',
-      'One property controls the space between the cards; another is scaling the '
-      'featured card the wrong way.',
-      'Give .pricing__grid a gap (the other rows use 28px) and make the scale() '
-      'on .pricing-card--featured larger than 1, not smaller.'),
+     ('The three plans should be clearly separated from each other, and the '
+      'highlighted "Most popular" plan is supposed to draw the eye by being '
+      'slightly larger than its neighbours — not smaller.',
+      'Two rules are involved: `.pricing__grid` for the row, and '
+      '`.pricing-card--featured` for the highlighted card.',
+      'On `.pricing__grid`, check the `gap`. On `.pricing-card--featured`, check '
+      'the `transform`: a `scale()` below 1 shrinks an element, and above 1 '
+      'enlarges it.'),
      _check_pricing),
 
     ('css-responsive', 'css', 'Mobile styles only apply to mobile',
-     'The phone layout should take over below 860px, not above it.',
-     ('On this full-size preview the nav links have vanished and a hamburger '
-      'button has appeared. That is the phone menu, on a desktop screen.',
-      'One @media block near the bottom of the stylesheet holds the entire phone '
-      'layout — the stacked hero, the slide-down menu, the hamburger — and it is '
-      'matching the wrong screens.',
-      'The @media query at 860px asks for min-width, so it applies to everything '
-      'wider than a phone. It should be max-width.'),
+     'The phone layout should take over on small screens, not on large ones.',
+     ('The phone layout is being applied to desktop screens. Look at the preview: '
+      'the nav links have vanished and a hamburger button has appeared in their '
+      'place — that is the mobile menu, on a full-size screen.',
+      'One `@media` block near the bottom of the stylesheet holds the entire '
+      'phone layout. Look at the condition on the block itself, not at the rules '
+      'inside it.',
+      'Check whether that query is triggered by a `min-width` or a `max-width` '
+      'condition, then work out which of the two switches styles on when the '
+      'screen gets *narrower* than the breakpoint.'),
      _check_responsive),
 ]
 

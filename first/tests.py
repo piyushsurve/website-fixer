@@ -12,6 +12,7 @@ is ignored, and the clock cannot be restarted.
 `solution.css` remains the organisers' reference.
 """
 
+import re
 from datetime import timedelta
 
 from asgiref.sync import async_to_sync
@@ -567,6 +568,106 @@ class FinalPreviewTests(TestCase):
         self.assertIn('id="wf-css"', arena)
         self.assertIn('id="wf-run"', arena)
 
+
+class HintQualityTests(TestCase):
+    """Hints must narrow the search in three steps, never paste the answer.
+
+    Hint 1 = the idea, hint 2 = where to look, hint 3 = which property.
+    """
+
+    SELECTOR = re.compile(r'`[.#][\w_-]+`')
+    PROPERTY = re.compile(r'`[a-z-]+`')
+
+    @staticmethod
+    def finished_declarations():
+        """Every declaration the player has to end up with, as literal text."""
+        answers = []
+        for pairs in GRADED_FIXES.values():
+            for broken, fixed in pairs:
+                already = {l.strip().rstrip(';') for l in broken.splitlines() if ':' in l}
+                for line in fixed.splitlines():
+                    declaration = line.strip().rstrip(';')
+                    if ':' in declaration and declaration not in already:
+                        answers.append(declaration)
+                if fixed.strip().startswith('@media'):
+                    answers.append(fixed.strip().rstrip(' {'))
+        return answers
+
+    def objectives(self):
+        return [(c['id'], c['description'], c['hints'])
+                for c in run_checks(CHALLENGE_HTML, STARTER_CSS)]
+
+    def test_every_objective_has_exactly_three_hints(self):
+        for objective, _description, hints in self.objectives():
+            self.assertEqual(len(hints), 3, objective)
+            for level, hint in enumerate(hints, start=1):
+                self.assertTrue(hint.strip(), f'{objective} hint {level} is empty')
+
+    def test_hint_one_teaches_the_idea_without_naming_the_code(self):
+        for objective, _description, hints in self.objectives():
+            self.assertNotRegex(hints[0], r'`[.#@][\w-]+', f'{objective}: hint 1 names a selector')
+
+    def test_hint_two_says_where_to_look(self):
+        for objective, _description, hints in self.objectives():
+            located = (self.SELECTOR.search(hints[1])
+                       or '@media' in hints[1]
+                       or '`body`' in hints[1])
+            self.assertTrue(located, f'{objective}: hint 2 points at no rule')
+
+    def test_hint_three_names_the_property(self):
+        for objective, _description, hints in self.objectives():
+            self.assertRegex(hints[2], self.PROPERTY.pattern,
+                             f'{objective}: hint 3 names no property')
+
+    def test_no_hint_ever_pastes_a_finished_declaration(self):
+        answers = self.finished_declarations()
+        self.assertGreaterEqual(len(answers), TOTAL_CHECKS)
+        for objective, description, hints in self.objectives():
+            text = ' '.join(hints) + ' ' + description
+            for answer in answers:
+                self.assertNotIn(answer, text, f'{objective} gives away {answer!r}')
+
+    def test_hints_stay_short_enough_to_read_at_a_glance(self):
+        for objective, _description, hints in self.objectives():
+            for level, hint in enumerate(hints, start=1):
+                self.assertLessEqual(len(hint), 420, f'{objective} hint {level} is a paragraph')
+
+    def test_the_two_masked_objectives_warn_the_player(self):
+        """Fixing these changes nothing on screen until the breakpoint is fixed.
+
+        Measured at 1120px: `.hero__container` keeps a single 1072px track and
+        `.navbar__menu` stays opacity:0 / position:fixed, both because the
+        misfiring 860px block still applies. Without a note the player thinks
+        their correct edit failed.
+        """
+        hints = {objective: h for objective, _d, h in self.objectives()}
+        for objective in ('css-hero-split', 'css-nav-spacing'):
+            self.assertIn('responsive objective', ' '.join(hints[objective]).lower(),
+                          f'{objective} needs the interaction note')
+        # ...and the note must not leak the breakpoint's own answer
+        for objective in ('css-hero-split', 'css-nav-spacing'):
+            self.assertNotIn('max-width', ' '.join(hints[objective]))
+
+    def test_the_console_hint_disambiguates_every_other_rotation(self):
+        """`rotate(45deg)` appears three times; only `.console` is wrong.
+
+        The other two are correct: the FAQ's open icon and the mobile menu
+        button's cross. A player who searches the file must be told, or they
+        will "fix" a rule that was never broken.
+        """
+        decoys = STARTER_CSS.count('rotate(45deg)')
+        self.assertEqual(decoys, 3)
+        hints = ' '.join({o: h for o, _d, h in self.objectives()}['css-console'])
+        self.assertIn('.console', hints)
+        self.assertIn('three times', hints, 'the hint must state how many there are')
+        self.assertIn('FAQ', hints)
+
+    def test_no_hint_asks_for_html_or_javascript(self):
+        for objective, description, hints in self.objectives():
+            text = (' '.join(hints) + ' ' + description).lower()
+            for forbidden in ('javascript', 'index.html', '<div', '<span', 'markup'):
+                self.assertNotIn(forbidden, text, f'{objective} mentions {forbidden}')
+
 class PresenceTests(TransactionTestCase):
     """The live player count is per browser session, not per socket.
 
@@ -699,3 +800,33 @@ class PresenceTests(TransactionTestCase):
             await socket.disconnect()
 
         async_to_sync(run)()
+
+
+class HintMarkupTests(TestCase):
+    """Backtick spans in a hint render as <code>, and only as <code>."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='Tester', pc_no='PC-HM', password='pw-123456')
+        self.client.force_login(self.user, backend='first.backends.PCNoBackend')
+
+    def test_backticks_become_code_elements(self):
+        from .templatetags.wf_hints import code_spans
+        self.assertEqual(code_spans('Check `display` on `.navbar`.'),
+                         'Check <code>display</code> on <code>.navbar</code>.')
+
+    def test_the_filter_escapes_before_it_marks_anything_safe(self):
+        from .templatetags.wf_hints import code_spans
+        rendered = code_spans('<script>alert(1)</script> and `<b>x</b>`')
+        self.assertNotIn('<script>', rendered)
+        self.assertIn('&lt;script&gt;', rendered)
+        self.assertIn('<code>&lt;b&gt;x&lt;/b&gt;</code>', rendered)
+
+    def test_the_arena_renders_hint_code_spans(self):
+        page = self.client.get(reverse('home')).content.decode()
+        self.assertIn('<code>.navbar</code>', page)
+        self.assertNotIn('`.navbar`', page)
+
+    def test_each_hint_is_labelled_with_its_level(self):
+        page = self.client.get(reverse('home')).content.decode()
+        for label in ('the idea', 'where to look', 'which property'):
+            self.assertEqual(page.count(label), TOTAL_CHECKS, label)

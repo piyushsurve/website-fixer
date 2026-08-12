@@ -115,9 +115,26 @@ views, templates or JS knows what the challenge is.
 whitespace, property order, comments and equivalent answers (`flex` vs
 `inline-flex`, `56px` vs `clamp(...)`, `repeat(3, 1fr)` vs `auto-fit`, a
 literal `16px` vs the `--radius-md` token) all pass. Each objective carries a
-description plus **three hints** that the player unlocks one at a time: what
-looks wrong, which concept is involved, and finally which property in which
-rule.
+description plus **three hints** that the player unlocks one at a time, each
+narrowing the search:
+
+| Level | Answers | Never contains |
+| --- | --- | --- |
+| 1 · the idea | what kind of CSS this is | a selector or a property |
+| 2 · where to look | the rule(s) involved | — |
+| 3 · which property | the property and which way it is wrong | the finished declaration |
+
+`HintQualityTests` enforces that shape: hint 1 must not name a selector, hint 2
+must point at a rule, hint 3 must name a property, and no hint may contain any
+literal declaration from `GRADED_FIXES`. Backtick spans render as `<code>`
+through the `code_spans` filter, which escapes before it marks safe.
+
+Two objectives carry an interaction note. Measured at 1120px, while the 860px
+breakpoint is still misfiring it overrides `.hero__container`'s column count
+and hides `.navbar__menu` entirely, so fixing `css-hero-split` or
+`css-nav-spacing` changes nothing on screen. Their hints say so without
+revealing how to fix the breakpoint — a test asserts both the note and the
+absence of `max-width` in them.
 
 Two objectives interact, on purpose. The reversed breakpoint
 (`@media (min-width: 860px)`) applies the entire phone stylesheet to desktop,

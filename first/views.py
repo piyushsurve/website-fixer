@@ -1,8 +1,11 @@
+import re
+
 from django.contrib.auth import authenticate, login, logout
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 
 from .checks import TOTAL_CHECKS, run_checks
@@ -14,6 +17,7 @@ from .game_config import (
     ROUND_NUMBER,
     SITE_NAME,
     SITE_TAGLINE,
+    SOLUTION_CSS,
     STARTER_CSS,
     TIMER_DANGER_SECONDS,
     TIMER_SYNC_INTERVAL_SECONDS,
@@ -34,6 +38,12 @@ CHALLENGE = {
     'minutes': GAME_DURATION_SECONDS // 60,
     'objectives': TOTAL_CHECKS,
 }
+
+
+# Matches the challenge page's own <link rel="stylesheet" href="style.css">.
+_STYLESHEET_LINK = re.compile(
+    r"""<link\s[^>]*href\s*=\s*['"][^'"]*style[.]css['"][^>]*>""", re.I,
+)
 
 
 def _ensure_session(request):
@@ -132,9 +142,37 @@ def home(request):
                 'check': reverse('api_check'),
                 'state': reverse('api_state'),
                 'reset': reverse('api_reset'),
+                'finalPreview': reverse('api_final_preview'),
             },
         },
     })
+
+
+@xframe_options_sameorigin
+def final_preview(request):
+    """Render the finished NovaCloud page: the fixed markup + the gold standard.
+
+    A *visual reference only*. It reads nothing from the player and writes
+    nothing back: no grading, no progress, no autosave, and deliberately no
+    `start_challenge()` call, so opening it never touches the clock.
+
+    The composed document is served from here rather than embedded in the arena
+    page so the arena's own source never carries the answers, and it is loaded
+    into a sandboxed iframe so it cannot reach the game shell.
+    """
+    if not request.user.is_authenticated:
+        return redirect('login')
+
+    document = _STYLESHEET_LINK.sub(
+        lambda _: '<style>' + SOLUTION_CSS + '</style>', CHALLENGE_HTML, count=1,
+    )
+    # The site sends X-Frame-Options: DENY everywhere else. This one view is
+    # relaxed to SAMEORIGIN because the arena frames it; it stays un-embeddable
+    # by any other origin, and the frame itself carries an empty `sandbox`.
+    response = HttpResponse(document, content_type='text/html; charset=utf-8')
+    response['Cache-Control'] = 'no-store'
+    response['X-Robots-Tag'] = 'noindex, nofollow'
+    return response
 
 
 # ----------------------------------------------------------------- auth ----

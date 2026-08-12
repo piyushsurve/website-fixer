@@ -423,6 +423,150 @@ class ArenaPageTests(TestCase):
         self.assertEqual(self.client.get(reverse('start')).status_code, 302)
 
 
+
+class FinalPreviewTests(TestCase):
+    """The final preview is a visual reference: it shows, it never grades."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='Tester', pc_no='PC-FP', password='pw-123456')
+        self.client.force_login(self.user, backend='first.backends.PCNoBackend')
+        self.client.get(reverse('home'))  # start the clock
+        self.url = reverse('api_final_preview')
+
+    def fetch(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    # 1. renders CHALLENGE_HTML + solution.css
+    def test_it_renders_the_challenge_markup_with_the_gold_standard(self):
+        body = self.fetch().content.decode()
+
+        # the finished page, in full
+        for section in ('id="features"', 'id="pricing"', 'id="faq"',
+                        'id="testimonials"', 'id="how-it-works"', 'site-footer'):
+            self.assertIn(section, body, section)
+        self.assertIn('<h1 class="hero__title">', body)
+
+        # ...styled by the gold standard, inlined in place of the link tag
+        self.assertIn('<style>', body)
+        self.assertNotIn('href="style.css"', body)
+        for correct in ('line-height: 1.6;',
+                        'grid-template-columns: repeat(3, 1fr);',
+                        '@media (max-width: 860px)'):
+            self.assertIn(correct, body, correct)
+
+    # 2. does not use the player's CSS
+    def test_it_ignores_whatever_the_player_has_written(self):
+        self.client.post(reverse('save_css'), {'css': 'body { background: fuchsia; }'})
+        body = self.fetch().content.decode()
+        self.assertNotIn('fuchsia', body)
+        self.assertIn('line-height: 1.6;', body)
+
+        # ...and the player's own stylesheet is untouched by the visit
+        self.assertEqual(self.client.get(reverse('get_css')).json()['css'],
+                         'body { background: fuchsia; }')
+
+    # 3. does not modify objective progress
+    def test_it_never_grades_or_advances_progress(self):
+        before = self.client.post(reverse('api_check'), {'css': STARTER_CSS}).json()
+        self.assertEqual(before['passed'], 0)
+
+        self.fetch()
+        self.fetch()
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.best_score, 0)
+        self.assertIsNone(self.user.completed_at)
+        self.assertFalse(self.client.get(reverse('api_state')).json()['completed'])
+
+    # 4. does not modify the player's CSS
+    def test_it_leaves_the_saved_stylesheet_alone(self):
+        mine = STARTER_CSS + '\n/* my working notes */\n'
+        self.client.post(reverse('save_css'), {'css': mine})
+        self.fetch()
+        self.assertEqual(self.client.get(reverse('get_css')).json()['css'], mine)
+
+    # 5. does not reveal source code
+    def test_the_arena_page_never_carries_the_answers(self):
+        arena = self.client.get(reverse('home')).content.decode()
+        # anchored to the rule each answer belongs to: `line-height: 1.6` on its
+        # own is legitimately still there, for `.testimonial-card__quote`.
+        for answer in ('  color: var(--color-text);\n  line-height: 1.6;',
+                       '.features__grid {\n  display: grid;\n'
+                       '  grid-template-columns: repeat(3, 1fr);',
+                       '@media (max-width: 860px)'):
+            self.assertNotIn(answer, arena, answer)
+        # the arena links to the preview rather than embedding it
+        self.assertIn(self.url, arena)
+
+    def test_there_is_no_endpoint_serving_the_raw_stylesheet(self):
+        body = self.fetch().content.decode()
+        # the gold standard only ever arrives inside a rendered page
+        self.assertTrue(body.lstrip().startswith('<!DOCTYPE html>'))
+        self.assertNotEqual(body.strip(), SOLUTION_CSS.strip())
+
+    def test_it_requires_authentication(self):
+        self.client.logout()
+        self.assertEqual(self.client.get(self.url).status_code, 302)
+
+    # 6. does not touch the timer
+    def test_it_does_not_start_extend_or_reset_the_clock(self):
+        self.user.refresh_from_db()
+        started = self.user.game_start_time
+        remaining = self.client.get(reverse('api_state')).json()['remaining']
+
+        self.fetch()
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.game_start_time, started)
+        self.assertLessEqual(self.client.get(reverse('api_state')).json()['remaining'], remaining)
+
+    def test_it_does_not_start_the_clock_for_someone_who_never_entered(self):
+        fresh = User.objects.create_user(username='Fresh', pc_no='PC-FP2', password='pw-123456')
+        self.client.force_login(fresh, backend='first.backends.PCNoBackend')
+        self.fetch()
+        fresh.refresh_from_db()
+        self.assertIsNone(fresh.game_start_time, 'the reference view must not start a round')
+
+    def test_it_still_opens_after_the_session_expires(self):
+        self.user.game_start_time = timezone.now() - timedelta(seconds=GAME_DURATION_SECONDS + 1)
+        self.user.save(update_fields=['game_start_time'])
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    # 7. isolated from the game shell
+    def test_it_is_served_as_its_own_document_for_a_sandboxed_frame(self):
+        response = self.fetch()
+        self.assertTrue(response['Content-Type'].startswith('text/html'))
+        self.assertEqual(response['Cache-Control'], 'no-store')
+
+        # The site denies framing everywhere else; this one view must allow the
+        # arena to frame it, or the overlay silently renders an empty box.
+        self.assertEqual(response['X-Frame-Options'], 'SAMEORIGIN')
+        self.assertEqual(self.client.get(reverse('home'))['X-Frame-Options'], 'DENY')
+
+        body = response.content.decode()
+        # nothing from the game shell leaks in, and nothing of it leaks out
+        self.assertNotIn('wf-arena', body)
+        self.assertNotIn('wf-base.css', body)
+        self.assertNotIn('<script', body)
+
+        arena = self.client.get(reverse('home')).content.decode()
+        self.assertIn('id="wf-final-frame"', arena)
+        # the frame that shows it carries an empty sandbox, like the main preview
+        self.assertIn('class="wf-preview" title="The finished NovaCloud page" sandbox', arena)
+
+    # 8. it can be closed and the arena is still there
+    def test_the_overlay_ships_with_a_way_out(self):
+        arena = self.client.get(reverse('home')).content.decode()
+        self.assertIn('id="wf-final-open"', arena)
+        self.assertIn('id="wf-final-close"', arena)
+        self.assertIn('id="wf-final"', arena)
+        # it is an overlay on the live arena, not a separate page
+        self.assertIn('hidden role="dialog"', arena)
+        self.assertIn('id="wf-css"', arena)
+        self.assertIn('id="wf-run"', arena)
+
 class PresenceTests(TransactionTestCase):
     """The live player count is per browser session, not per socket.
 

@@ -24,4 +24,7 @@ urlpatterns = [
     path('api/state/', views.api_state, name='api_state'),
     path('api/check/', views.api_check, name='api_check'),
     path('api/reset/', views.api_reset, name='api_reset'),
+
+    # Visual reference only: the finished page, never graded.
+    path('api/final-preview/', views.final_preview, name='api_final_preview'),
 ]

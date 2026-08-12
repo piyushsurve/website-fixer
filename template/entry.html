@@ -93,7 +93,9 @@
             <button type="button" class="wf-width" data-width="full" aria-pressed="true">Desktop</button>
             <button type="button" class="wf-width" data-width="phone" aria-pressed="false">Phone</button>
           </div>
-          <span class="wf-panel__hint">sandboxed</span>
+          <button type="button" class="wf-btn wf-btn--ref wf-btn--sm" id="wf-final-open">
+            <span aria-hidden="true">◱</span> View final preview
+          </button>
         </div>
         <!--
           The player's page is rendered here and nowhere else. `sandbox` with no
@@ -151,6 +153,41 @@
       </section>
     </div>
   </main>
+</div>
+
+<!--
+  FINAL PREVIEW -- a visual reference, not a grading action.
+
+  The finished page is composed server-side (`/api/final-preview/`) and loaded
+  by URL into its own sandboxed iframe, so the arena's own source never carries
+  the answers and the gold-standard CSS can never reach the game shell.
+  Opening this changes nothing: no grading, no progress, no clock.
+-->
+<div class="wf-final" id="wf-final" hidden role="dialog" aria-modal="true"
+     aria-labelledby="wf-final-title">
+  <div class="wf-final__box">
+    <div class="wf-final__bar">
+      <span class="wf-final__title" id="wf-final-title">Final preview</span>
+      <span class="wf-final__tag">how {{ challenge.site }} should look when it is fixed</span>
+      <span class="wf-panel__spacer"></span>
+
+      <div class="wf-widths" role="group" aria-label="Final preview width">
+        <button type="button" class="wf-width" data-final-width="full" aria-pressed="true">Desktop</button>
+        <button type="button" class="wf-width" data-final-width="phone" aria-pressed="false">Phone</button>
+      </div>
+
+      <button type="button" class="wf-final__close" id="wf-final-close" aria-label="Close final preview">✕</button>
+    </div>
+
+    <div class="wf-preview-wrap" id="wf-final-wrap" data-width="full">
+      <iframe id="wf-final-frame" class="wf-preview" title="The finished NovaCloud page" sandbox></iframe>
+    </div>
+
+    <p class="wf-final__foot">
+      Reference only — nothing here is graded, and your clock keeps running.
+      Compare it with your preview, then fix <b>style.css</b>.
+    </p>
+  </div>
 </div>
 
 <div class="wf-modal" id="wf-modal" hidden role="dialog" aria-modal="true" aria-labelledby="wf-modal-title">

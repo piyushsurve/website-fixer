@@ -47,7 +47,12 @@
     modalTimeLabel: document.getElementById('wf-modal-timelabel'),
     modalTime: document.getElementById('wf-modal-time'),
     modalStatus: document.getElementById('wf-modal-status'),
-    modalClose: document.getElementById('wf-modal-close')
+    modalClose: document.getElementById('wf-modal-close'),
+    finalOpen: document.getElementById('wf-final-open'),
+    finalClose: document.getElementById('wf-final-close'),
+    final: document.getElementById('wf-final'),
+    finalWrap: document.getElementById('wf-final-wrap'),
+    finalFrame: document.getElementById('wf-final-frame')
   };
 
   var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
@@ -127,19 +132,22 @@
    * Letting the iframe be panel-width instead would sit permanently inside
    * NovaCloud's own 760px breakpoint, hiding the desktop-only mistakes.
    */
-  function fitPreview() {
-    var phone = el.previewWrap.getAttribute('data-width') === 'phone';
+  function fitFrame(wrap, frame) {
+    var phone = wrap.getAttribute('data-width') === 'phone';
     var virtual = phone ? PHONE_WIDTH : DESKTOP_WIDTH;
-    var width = el.previewWrap.clientWidth;
-    var height = el.previewWrap.clientHeight;
+    var width = wrap.clientWidth;
+    var height = wrap.clientHeight;
     if (!width || !height) { return; }
 
     var scale = Math.min(1, width / virtual);
-    el.preview.style.width = virtual + 'px';
-    el.preview.style.height = Math.round(height / scale) + 'px';
-    el.preview.style.transform = 'scale(' + scale + ')';
-    el.preview.style.left = Math.max(0, (width - virtual * scale) / 2) + 'px';
+    frame.style.width = virtual + 'px';
+    frame.style.height = Math.round(height / scale) + 'px';
+    frame.style.transform = 'scale(' + scale + ')';
+    frame.style.left = Math.max(0, (width - virtual * scale) / 2) + 'px';
   }
+
+  function fitPreview() { fitFrame(el.previewWrap, el.preview); }
+  function fitFinal() { fitFrame(el.finalWrap, el.finalFrame); }
 
   // --------------------------------------------------------------- saving --
 
@@ -317,6 +325,49 @@
     el.modalClose.focus();
   }
 
+  // -------------------------------------------------------- final preview --
+
+  /*
+   * The finished page, for comparison. Purely informational: it never reads
+   * the player's stylesheet, never posts anything, and never touches the
+   * clock or the objectives. The document comes from the server by URL and
+   * lands in its own `sandbox`ed iframe, so the gold-standard CSS is scoped
+   * to that document and cannot style the arena around it.
+   */
+  var finalLoaded = false;
+
+  function openFinal() {
+    if (!finalLoaded) {
+      el.finalFrame.src = urls.finalPreview;
+      finalLoaded = true;
+    }
+    el.final.hidden = false;
+    fitFinal();
+    el.finalClose.focus();
+  }
+
+  function closeFinal() {
+    el.final.hidden = true;
+    el.finalOpen.focus();
+  }
+
+  el.finalOpen.addEventListener('click', openFinal);
+  el.finalClose.addEventListener('click', closeFinal);
+
+  el.final.addEventListener('click', function (event) {
+    if (event.target === el.final) { closeFinal(); }  // click the backdrop
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-final-width]'), function (button) {
+    button.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-final-width]'), function (other) {
+        other.setAttribute('aria-pressed', String(other === button));
+      });
+      el.finalWrap.setAttribute('data-width', button.getAttribute('data-final-width'));
+      fitFinal();
+    });
+  });
+
   // ----------------------------------------------------------------- wire --
 
   function bindEditor(area) {
@@ -361,7 +412,7 @@
     });
   });
 
-  window.addEventListener('resize', fitPreview);
+  window.addEventListener('resize', function () { fitPreview(); fitFinal(); });
 
   el.objectives.addEventListener('click', function (event) {
     var button = event.target.closest('.wf-hint-btn');
@@ -385,6 +436,7 @@
   el.modalClose.addEventListener('click', function () { el.modal.hidden = true; });
 
   document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && !el.final.hidden) { closeFinal(); return; }
     if (event.key === 'Escape' && !el.modal.hidden) { el.modal.hidden = true; return; }
     if (!(event.ctrlKey || event.metaKey)) { return; }
     if (event.key === 'Enter') { event.preventDefault(); runChecks(); }

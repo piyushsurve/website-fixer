@@ -143,6 +143,29 @@ on its own:
 
 The stylesheet's `.reveal` rules are dead code: the markup never uses that class.
 
+### Final preview
+
+`[ View final preview ]` in the preview panel head opens the **finished**
+NovaCloud page — `index.html` styled by `solution.css` — so the player can see
+what they are aiming at and infer the CSS from the visual difference.
+
+It is a reference, never a grading action. `final_preview()` in
+`first/views.py` reads nothing from the player and writes nothing back: no
+grading, no progress, no autosave, and deliberately no `start_challenge()`
+call, so opening it never starts or extends a clock. The document is composed
+server-side and loaded **by URL** into its own empty-`sandbox` iframe, so the
+arena's own source never carries the answers and the gold-standard CSS is
+scoped to that document.
+
+That view is the only one exempted from the site-wide `X-Frame-Options: DENY`
+(to `SAMEORIGIN`); without it the overlay renders an empty box. A test asserts
+both headers.
+
+Note that a participant with devtools can still inspect the rendered reference
+page and read its computed styles. Anything rendered in the player's own
+browser is readable there — the feature hides the answers from the game UI, not
+from a determined inspector.
+
 ### Why the preview is scaled
 
 `fitPreview()` in `static/js/wf-arena.js` renders the iframe at a fixed 1120px

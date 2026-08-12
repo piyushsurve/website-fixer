@@ -1,0 +1,227 @@
+/* ==========================================================================
+   Website Fixer -- game shell design system.
+
+   Everything here belongs to the GAME UI and is namespaced `wf-`.
+   The website the player repairs never sees these rules: it is rendered
+   inside a sandboxed iframe, which is its own document with its own CSS.
+   ========================================================================== */
+
+:root {
+  --wf-bg: #0e1116;
+  --wf-bg-soft: #121722;
+  --wf-surface: #161c26;
+  --wf-surface-2: #1c2430;
+  --wf-line: #26303d;
+  --wf-line-soft: #1f2732;
+
+  --wf-text: #e8edf4;
+  --wf-muted: #94a3b5;
+  --wf-dim: #64748b;
+
+  --wf-accent: #f6a623;
+  --wf-accent-soft: rgba(246, 166, 35, 0.14);
+  --wf-ok: #34d399;
+  --wf-ok-soft: rgba(52, 211, 153, 0.14);
+  --wf-danger: #f87171;
+  --wf-danger-soft: rgba(248, 113, 113, 0.14);
+
+  --wf-radius: 14px;
+  --wf-radius-sm: 10px;
+  --wf-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+
+  --wf-sans: "Segoe UI", Inter, system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  --wf-mono: "JetBrains Mono", "Cascadia Mono", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body.wf-body {
+  margin: 0;
+  background: var(--wf-bg);
+  color: var(--wf-text);
+  font-family: var(--wf-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wf-mono { font-family: var(--wf-mono); }
+
+a { color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--wf-accent);
+  outline-offset: 2px;
+}
+
+/* ---------- buttons ---------- */
+
+.wf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 1px solid var(--wf-line);
+  border-radius: var(--wf-radius-sm);
+  background: var(--wf-surface-2);
+  color: var(--wf-text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.wf-btn:hover:not(:disabled) { transform: translateY(-1px); border-color: #3a4757; }
+.wf-btn:active:not(:disabled) { transform: translateY(0); }
+.wf-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.wf-btn--primary {
+  background: linear-gradient(180deg, #ffb945, var(--wf-accent));
+  border-color: #d98c12;
+  color: #201603;
+}
+.wf-btn--primary:hover:not(:disabled) { box-shadow: 0 10px 26px rgba(246, 166, 35, 0.25); }
+
+.wf-btn--ok {
+  background: linear-gradient(180deg, #4ade80, #22c55e);
+  border-color: #16a34a;
+  color: #04240f;
+}
+.wf-btn--ok:hover:not(:disabled) { box-shadow: 0 10px 26px rgba(52, 211, 153, 0.22); }
+
+.wf-btn--ghost { background: transparent; }
+.wf-btn--lg { padding: 15px 30px; font-size: 17px; }
+.wf-btn--block { width: 100%; }
+
+/* ---------- brand ---------- */
+
+.wf-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+
+.wf-brand__mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  background: linear-gradient(140deg, var(--wf-accent), #e07c0a);
+  color: #1b1204;
+  font-family: var(--wf-mono);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.wf-brand__mark--sm { width: 30px; height: 30px; border-radius: 9px; font-size: 12px; }
+
+.wf-brand__sub {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wf-dim);
+}
+
+/* ---------- surfaces ---------- */
+
+.wf-card {
+  background: var(--wf-surface);
+  border: 1px solid var(--wf-line-soft);
+  border-radius: var(--wf-radius);
+  box-shadow: var(--wf-shadow);
+}
+
+.wf-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid var(--wf-line);
+  border-radius: 999px;
+  background: var(--wf-bg-soft);
+  color: var(--wf-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.wf-badge--accent { color: var(--wf-accent); border-color: rgba(246, 166, 35, 0.35); background: var(--wf-accent-soft); }
+
+/* ---------- live player count ---------- */
+
+.wf-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 14px;
+  border: 1px solid var(--wf-line);
+  border-radius: 999px;
+  background: var(--wf-bg-soft);
+  font-size: 13px;
+  color: var(--wf-muted);
+  white-space: nowrap;
+}
+
+.wf-presence__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wf-dim);
+  flex: none;
+}
+
+.wf-presence[data-state="live"] .wf-presence__dot {
+  background: var(--wf-ok);
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+  animation: wf-ping 2.4s ease-out infinite;
+}
+
+.wf-presence[data-state="offline"] .wf-presence__dot { background: var(--wf-danger); }
+
+.wf-presence__count {
+  font-family: var(--wf-mono);
+  font-weight: 700;
+  color: var(--wf-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-presence__count.is-bump { animation: wf-bump 0.35s ease; }
+
+@keyframes wf-ping {
+  0%   { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.45); }
+  70%  { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+
+@keyframes wf-bump {
+  0%   { transform: translateY(0); }
+  40%  { transform: translateY(-4px); color: var(--wf-accent); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes wf-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.wf-rise { animation: wf-rise 0.5s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

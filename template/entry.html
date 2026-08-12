@@ -1,143 +1,133 @@
-<!DOCTYPE html>
+{% load static %}<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Website Fixer Game</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    {{ css|safe }}
-  </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Arena — Website Fixer</title>
+  <link rel="stylesheet" href="{% static 'css/wf-base.css' %}">
+  <link rel="stylesheet" href="{% static 'css/wf-arena.css' %}">
 </head>
-<body class="bg-gray-100 h-screen flex flex-col">
+<body class="wf-body wf-body--arena">
 
-  <!-- Header -->
-  <header class="flex justify-between items-center px-6 py-4 bg-white shadow-md">
-    <h1 class="text-2xl font-bold text-gray-800">Website Fixer Game</h1>
-    <div class="flex items-center space-x-4">
-      <span class="px-4 py-2 rounded-md bg-gray-200 text-gray-700 shadow">
-        👤 {{ request.user.username }}
+<div class="wf-arena">
+
+  <header class="wf-arena__bar">
+    <a class="wf-arena__brand" href="/">
+      <span class="wf-brand__mark wf-brand__mark--sm">WF</span>
+      <span>Website Fixer</span>
+    </a>
+
+    <span class="wf-arena__spacer"></span>
+
+    <div class="wf-timer" id="wf-timer" data-state="normal" title="Time left in this session">
+      <span class="wf-timer__label">Time</span>
+      <span class="wf-timer__value" id="wf-timer-value">30:00</span>
+    </div>
+
+    <div class="wf-progress" title="Objectives cleared">
+      <span class="wf-progress__count" id="wf-progress-count">{{ passed }}/{{ state.total }}</span>
+      <span class="wf-progress__track">
+        <span class="wf-progress__fill" id="wf-progress-fill"></span>
       </span>
-      <a href="/logout/" class="px-4 py-2 rounded-md bg-red-500 text-white shadow hover:bg-red-600">Logout</a>
-      <button type="button" id="previewBtn" class="px-4 py-2 rounded-md bg-blue-500 text-white shadow hover:bg-blue-600">Preview</button>
-      <button type="button" id="editorBtn" class="px-4 py-2 rounded-md bg-gray-300 text-gray-800 shadow hover:bg-gray-400">Code Editor</button>
-      <div id="timerDisplay" class="px-4 py-2 rounded-md bg-gray-200 text-gray-700 shadow">⏱ {{ remaining_time }}</div>
+    </div>
+
+    <div class="wf-presence" data-presence data-state="connecting" title="Players connected right now">
+      <span class="wf-presence__dot" aria-hidden="true"></span>
+      <span class="wf-presence__count" data-presence-count>–</span>
+      <span>online</span>
+    </div>
+
+    <div class="wf-arena__group">
+      <button type="button" class="wf-btn wf-btn--ok" id="wf-run">Run checks</button>
+      <a class="wf-btn wf-btn--ghost" href="/logout/">Exit</a>
     </div>
   </header>
 
-  <!-- Main Content -->
-  <main class="flex-1 p-6">
-    <div id="previewSection" class="w-full h-full bg-white rounded-lg shadow-md flex items-center justify-center">
-      <iframe id="previewFrame" class="w-full h-full rounded-lg"></iframe>
-    </div>
+  <main class="wf-arena__main">
 
-    <div id="editorSection" class="hidden w-full h-full grid grid-cols-2 gap-6">
-      <div class="bg-white rounded-lg shadow-md p-4 flex flex-col">
-        <h2 class="text-lg font-semibold mb-2">HTML Code</h2>
-        <!-- HTML textarea is now read-only/disabled for participants -->
-        <textarea id="htmlCode" class="flex-1 w-full p-3 border rounded-md bg-gray-50 text-sm font-mono" disabled readonly aria-disabled="true">
-<div class="card">
-  <h1>Hello World</h1>
-  <p>This is a full website preview inside the iframe.</p>
-  <button>Click Me</button>
-</div>
-        </textarea>
+    <!-- editor -->
+    <section class="wf-panel wf-panel--editor">
+      <div class="wf-panel__head">
+        <div class="wf-tabs" role="tablist" aria-label="Code editor">
+          <button type="button" class="wf-tab" data-tab="html" role="tab" aria-selected="true">index.html</button>
+          <button type="button" class="wf-tab" data-tab="css" role="tab" aria-selected="false">style.css</button>
+        </div>
+        <span class="wf-panel__spacer"></span>
+        <span class="wf-panel__hint">Tab = 2 spaces · Ctrl+Enter = run checks</span>
       </div>
 
-      <div class="bg-white rounded-lg shadow-md p-4 flex flex-col">
-        <h2 class="text-lg font-semibold mb-2">CSS Editor</h2>
-        <form id="cssForm" class="flex flex-col flex-1">
-          {% csrf_token %}
-          <textarea name="css" id="cssCode" class="flex-1 w-full p-3 border rounded-md bg-gray-50 text-sm font-mono">{{ css }}</textarea>
-          <button type="submit" id="submitBtn" class="mt-4 px-4 py-2 rounded-md bg-green-500 text-white shadow hover:bg-green-600">Submit CSS</button>
-        </form>
+      <div class="wf-editor">
+        <textarea id="wf-html" class="wf-editor__area" spellcheck="false" autocomplete="off"
+                  aria-label="HTML editor">{{ html }}</textarea>
+        <textarea id="wf-css" class="wf-editor__area" spellcheck="false" autocomplete="off"
+                  aria-label="CSS editor" hidden>{{ css }}</textarea>
       </div>
+
+      <div class="wf-editor__foot">
+        <span class="wf-save" id="wf-save-state" data-state="saved">saved</span>
+        <span class="wf-panel__spacer"></span>
+        <button type="button" class="wf-btn wf-btn--ghost" id="wf-reset">Reset page</button>
+      </div>
+    </section>
+
+    <!-- preview + objectives -->
+    <div class="wf-arena__right">
+      <section class="wf-panel">
+        <div class="wf-panel__head">
+          <span class="wf-panel__title">Live preview</span>
+          <span class="wf-panel__spacer"></span>
+          <span class="wf-panel__hint">sandboxed · scripts off</span>
+        </div>
+        <!--
+          The player's page is rendered here and nowhere else. `sandbox` with no
+          tokens means: no scripts, no forms, no same-origin access, no top-level
+          navigation. Their CSS is scoped to this document, so it cannot reach the
+          game shell -- and the game shell's CSS never reaches their page.
+        -->
+        <iframe id="wf-preview" class="wf-preview" title="Preview of your website" sandbox></iframe>
+      </section>
+
+      <section class="wf-panel">
+        <div class="wf-panel__head">
+          <span class="wf-panel__title">Mission objectives</span>
+          <span class="wf-panel__spacer"></span>
+          <span class="wf-panel__hint">{{ state.total }} fixes</span>
+        </div>
+
+        <ul class="wf-objectives" id="wf-objectives">
+          {% for check in checks %}
+            <li class="wf-objective{% if check.passed %} is-done{% endif %}" data-check-id="{{ check.id }}">
+              <span class="wf-objective__mark">{% if check.passed %}✓{% endif %}</span>
+              <span>
+                <span class="wf-objective__title">{{ check.title }}</span>
+                <span class="wf-objective__tag">{{ check.group }}</span>
+                <span class="wf-objective__hint">{{ check.hint }}</span>
+              </span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
     </div>
   </main>
+</div>
 
-<script>
-  const previewBtn = document.getElementById('previewBtn');
-  const editorBtn = document.getElementById('editorBtn');
-  const previewSection = document.getElementById('previewSection');
-  const editorSection = document.getElementById('editorSection');
-  const iframe = document.getElementById('previewFrame');
-  const htmlCode = document.getElementById('htmlCode');
-  const timerDisplay = document.getElementById('timerDisplay');
-  const cssCode = document.getElementById('cssCode');
-  const submitBtn = document.getElementById('submitBtn');
-  const cssForm = document.getElementById("cssForm");
+<div class="wf-modal" id="wf-modal" hidden role="dialog" aria-modal="true" aria-labelledby="wf-modal-title">
+  <div class="wf-card wf-modal__box">
+    <div class="wf-modal__icon" id="wf-modal-icon">🏆</div>
+    <h2 class="wf-modal__title" id="wf-modal-title">Website repaired!</h2>
+    <p class="wf-modal__text" id="wf-modal-text"></p>
+    <div class="wf-modal__score" id="wf-modal-score"></div>
+    <div class="wf-modal__actions">
+      <button type="button" class="wf-btn" id="wf-modal-close">Review my code</button>
+      <a class="wf-btn wf-btn--primary" href="/">Back to home</a>
+    </div>
+  </div>
+</div>
 
-  // Load HTML + CSS into iframe
-  function loadHtml(cssContent = cssCode.value) {
-    // Disabled textarea still exposes .value in JS; fallback to innerText if needed
-    const htmlValue = (htmlCode && typeof htmlCode.value !== 'undefined' && htmlCode.value.trim() !== '') 
-      ? htmlCode.value 
-      : htmlCode.innerText || `
-<div class="card">
-  <h1>Hello World</h1>
-  <p>This is a full website preview inside the iframe.</p>
-  <button>Click Me</button>
-</div>`;
+<form style="display:none">{% csrf_token %}</form>
+{{ arena|json_script:"wf-arena-data" }}
 
-    const fullHtml = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>Preview</title>
-        <style>${cssContent}</style>
-      </head>
-      <body>${htmlValue}</body>
-      </html>
-    `;
-    iframe.srcdoc = fullHtml;
-  }
-
-  // AJAX submit for CSS
-  cssForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const formData = new FormData(cssForm);
-    const response = await fetch("/save-css/", { method: "POST", body: formData });
-    const data = await response.json();
-
-    if (data.error) {
-      alert(data.error);
-    } else {
-      // sync timer with backend
-      timeLeft = data.remaining_time;
-      // update preview with new CSS
-      loadHtml(data.css);
-    }
-  });
-
-  previewBtn.addEventListener('click', () => {
-    previewSection.classList.remove('hidden');
-    editorSection.classList.add('hidden');
-    loadHtml();
-  });
-
-  editorBtn.addEventListener('click', () => {
-    editorSection.classList.remove('hidden');
-    previewSection.classList.add('hidden');
-  });
-
-  // ---------------- TIMER LOGIC ----------------
-  let timeLeft = {{ remaining_time|default:"0" }};
-  const timerInterval = setInterval(() => {
-    const minutes = Math.floor(timeLeft / 60);
-    const seconds = timeLeft % 60;
-    timerDisplay.textContent = `⏱ ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-    if (timeLeft <= 0) {
-      clearInterval(timerInterval);
-      timerDisplay.textContent = "⏱ Time's up!";
-      cssCode.disabled = true;
-      submitBtn.disabled = true;
-      submitBtn.classList.add("bg-gray-400", "cursor-not-allowed");
-      submitBtn.classList.remove("bg-green-500", "hover:bg-green-600");
-    }
-    timeLeft--;
-  }, 1000);
-</script>
-
+<script src="{% static 'js/wf-presence.js' %}" defer></script>
+<script src="{% static 'js/wf-arena.js' %}" defer></script>
 </body>
 </html>

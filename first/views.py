@@ -1,115 +1,239 @@
-from django.shortcuts import render, redirect
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, logout
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.http import require_POST
+
+from .checks import TOTAL_CHECKS, run_checks
+from .game_config import (
+    GAME_DURATION_SECONDS,
+    STARTER_CSS,
+    STARTER_HTML,
+    TIMER_DANGER_SECONDS,
+    TIMER_SYNC_INTERVAL_SECONDS,
+    TIMER_WARNING_SECONDS,
+)
 from .models import CssRule, User
 
-GAME_DURATION = 30  # seconds
+# Generous ceiling; the challenge page is ~6 KB of HTML and ~4 KB of CSS.
+MAX_SUBMISSION_CHARS = 200_000
 
-# Index page
-def index(request):
-    return render(request, 'index.html')
+
+def _ensure_session(request):
+    """Presence dedupes by session key, so make sure the visitor has one."""
+    if not request.session.session_key:
+        request.session.create()
+
+
+def _get_submission(user):
+    submission, _ = CssRule.objects.get_or_create(
+        user=user,
+        defaults={'html': STARTER_HTML, 'css': STARTER_CSS},
+    )
+    return submission
+
+
+def _state(user):
+    return {
+        'remaining': user.remaining_seconds,
+        'duration': GAME_DURATION_SECONDS,
+        'expired': user.is_expired,
+        'completed': user.is_completed,
+        'locked': user.is_locked,
+        'score': user.best_score,
+        'total': TOTAL_CHECKS,
+    }
+
+
+# ---------------------------------------------------------------- pages ----
 
 def intro(request):
-    return render(request, "intro.html")
+    """Game home page."""
+    _ensure_session(request)
+    return render(request, 'intro.html', {
+        'duration_minutes': GAME_DURATION_SECONDS // 60,
+        'total_checks': TOTAL_CHECKS,
+    })
 
-# Signup view
-@csrf_exempt
+
+def start(request):
+    """Short 'booting the arena' transition between auth and the challenge."""
+    if not request.user.is_authenticated:
+        return redirect('login')
+    return render(request, 'start.html')
+
+
+def home(request):
+    """The challenge arena. Opening it for the first time starts the clock."""
+    if not request.user.is_authenticated:
+        return redirect('login')
+
+    _ensure_session(request)
+    request.user.start_challenge()
+    submission = _get_submission(request.user)
+
+    state = _state(request.user)
+    checks = run_checks(submission.html, submission.css)
+    passed = sum(1 for check in checks if check['passed'])
+
+    return render(request, 'entry.html', {
+        'html': submission.html,
+        'css': submission.css,
+        'state': state,
+        'checks': checks,
+        'passed': passed,
+        'arena': {
+            'state': state,
+            'timer': {
+                'warning': TIMER_WARNING_SECONDS,
+                'danger': TIMER_DANGER_SECONDS,
+                'sync': TIMER_SYNC_INTERVAL_SECONDS,
+            },
+            'urls': {
+                'save': reverse('save_css'),
+                'check': reverse('api_check'),
+                'state': reverse('api_state'),
+                'reset': reverse('api_reset'),
+            },
+        },
+    })
+
+
+# ----------------------------------------------------------------- auth ----
+
 def user_signup(request):
     if request.user.is_authenticated:
-        return redirect("home")
+        return redirect('start')
 
-    if request.method == "POST":
-        username = request.POST.get("username")
-        pc_no = request.POST.get("pc_no")
-        password = request.POST.get("password")
+    if request.method == 'POST':
+        username = (request.POST.get('username') or '').strip()
+        pc_no = (request.POST.get('pc_no') or '').strip()
+        password = request.POST.get('password') or ''
+
+        if not username or not pc_no or not password:
+            return render(request, 'signup.html', {'error': 'All fields are required'})
 
         if User.objects.filter(pc_no=pc_no).exists():
-            return render(request, "signup.html", {"error": "PC number already registered"})
+            return render(request, 'signup.html', {'error': 'PC number already registered'})
 
         user = User.objects.create_user(username=username, pc_no=pc_no, password=password)
-        user.backend = "first.backends.PCNoBackend"
-        # set start time immediately
-        user.game_start_time = timezone.now()
-        user.save()
+        user.backend = 'first.backends.PCNoBackend'
         login(request, user)
-        return redirect("home")
+        return redirect('start')
 
-    return render(request, "signup.html")
+    return render(request, 'signup.html')
 
 
-# Login view
-@csrf_exempt
 def user_login(request):
     if request.user.is_authenticated:
-        return redirect("home")
+        return redirect('start')
 
-    if request.method == "POST":
-        pc_no = request.POST.get("pc_no")
-        password = request.POST.get("password")
+    if request.method == 'POST':
+        pc_no = (request.POST.get('pc_no') or '').strip()
+        password = request.POST.get('password') or ''
         user = authenticate(request, pc_no=pc_no, password=password)
         if user:
-            user.backend = "first.backends.PCNoBackend"
+            user.backend = 'first.backends.PCNoBackend'
             login(request, user)
+            return redirect('start')
+        return render(request, 'login.html', {'error': 'Invalid credentials'})
 
-            # only set start time if not already set
-            if not user.game_start_time:
-                user.game_start_time = timezone.now()
-                user.save()
-
-            return redirect("home")
-        else:
-            return render(request, "login.html", {"error": "Invalid credentials"})
-    return render(request, "login.html")
+    return render(request, 'login.html')
 
 
-# Logout view
 def user_logout(request):
     logout(request)
-    return redirect("login")
+    return redirect('login')
 
 
-# Helper: calculate remaining time
-def get_remaining_time(user):
-    if not user.game_start_time:
-        return GAME_DURATION
-    elapsed = (timezone.now() - user.game_start_time).total_seconds()
-    return max(0, GAME_DURATION - int(elapsed))
+# ------------------------------------------------------------------ api ----
+
+def _read_submission_payload(request):
+    html = (request.POST.get('html') or '')[:MAX_SUBMISSION_CHARS]
+    css = (request.POST.get('css') or '')[:MAX_SUBMISSION_CHARS]
+    return html, css
 
 
-# Home view
-def home(request):
-    if not request.user.is_authenticated:
-        return redirect("login")
-
-    css = ""
-    rule = CssRule.objects.filter(user=request.user).last()
-    if rule:
-        css = rule.css
-
-    remaining = get_remaining_time(request.user)
-
-    return render(request, "entry.html", {"css": css, "remaining_time": remaining})
-
-
-# Save CSS
-@csrf_exempt
+@require_POST
 def save_css(request):
-    if request.method == "POST" and request.user.is_authenticated:
-        remaining = get_remaining_time(request.user)
-        if remaining <= 0:
-            return JsonResponse({"error": "Time is up!", "css": "", "remaining_time": 0})
+    """Autosave. Refuses writes once the session is locked (time up / done)."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Not logged in'}, status=403)
 
-        css = request.POST.get("css", "")
-        CssRule.objects.update_or_create(user=request.user, defaults={"css": css})
-        return JsonResponse({"css": css, "remaining_time": remaining})
-    return JsonResponse({"error": "Not logged in"})
+    state = _state(request.user)
+    if state['locked']:
+        state['error'] = 'Time is up!' if state['expired'] else 'Challenge already completed.'
+        return JsonResponse(state, status=200)
+
+    html, css = _read_submission_payload(request)
+    CssRule.objects.update_or_create(
+        user=request.user, defaults={'html': html, 'css': css},
+    )
+    return JsonResponse(state)
 
 
-# Get CSS
 def get_css(request):
-    if request.user.is_authenticated:
-        rule = CssRule.objects.filter(user=request.user).last()
-        return JsonResponse({"css": rule.css if rule else ""})
-    return JsonResponse({"css": ""})
+    if not request.user.is_authenticated:
+        return JsonResponse({'html': '', 'css': ''})
+    submission = _get_submission(request.user)
+    return JsonResponse({'html': submission.html, 'css': submission.css})
+
+
+def api_state(request):
+    """Authoritative countdown source. The browser only renders it."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Not logged in'}, status=403)
+    return JsonResponse(_state(request.user))
+
+
+@require_POST
+def api_check(request):
+    """Save, then grade the submission against the challenge objectives."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Not logged in'}, status=403)
+
+    user = request.user
+    if user.is_locked:
+        submission = _get_submission(user)
+        payload = _state(user)
+        payload['checks'] = run_checks(submission.html, submission.css)
+        payload['error'] = 'Time is up!' if user.is_expired else 'Challenge already completed.'
+        return JsonResponse(payload)
+
+    html, css = _read_submission_payload(request)
+    CssRule.objects.update_or_create(user=user, defaults={'html': html, 'css': css})
+
+    checks = run_checks(html, css)
+    passed = sum(1 for check in checks if check['passed'])
+
+    fields = []
+    if passed > user.best_score:
+        user.best_score = passed
+        fields.append('best_score')
+    if passed == TOTAL_CHECKS and not user.completed_at:
+        user.completed_at = timezone.now()
+        fields.append('completed_at')
+    if fields:
+        user.save(update_fields=fields)
+
+    payload = _state(user)
+    payload['checks'] = checks
+    payload['passed'] = passed
+    return JsonResponse(payload)
+
+
+@require_POST
+def api_reset(request):
+    """Put the broken page back. Does not touch the countdown."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Not logged in'}, status=403)
+    if request.user.is_locked:
+        return JsonResponse(_state(request.user))
+
+    CssRule.objects.update_or_create(
+        user=request.user, defaults={'html': STARTER_HTML, 'css': STARTER_CSS},
+    )
+    payload = _state(request.user)
+    payload.update({'html': STARTER_HTML, 'css': STARTER_CSS})
+    return JsonResponse(payload)

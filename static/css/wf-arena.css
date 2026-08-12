@@ -1,0 +1,348 @@
+/* Website Fixer -- challenge arena (game shell only, never the player's page) */
+
+body.wf-body--arena { overflow: hidden; }
+
+.wf-arena {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background:
+    radial-gradient(700px 300px at 8% -10%, rgba(246, 166, 35, 0.08), transparent 60%),
+    var(--wf-bg);
+}
+
+/* ---------- top bar ---------- */
+
+.wf-arena__bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--wf-line-soft);
+  background: rgba(18, 23, 34, 0.9);
+  backdrop-filter: blur(6px);
+}
+
+.wf-arena__brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.wf-arena__spacer { flex: 1; }
+
+.wf-arena__group { display: flex; align-items: center; gap: 10px; }
+
+/* timer */
+
+.wf-timer {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 16px;
+  border: 1px solid var(--wf-line);
+  border-radius: 999px;
+  background: var(--wf-bg-soft);
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+.wf-timer__label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wf-dim);
+}
+
+.wf-timer__value {
+  font-family: var(--wf-mono);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.wf-timer[data-state="warning"] { border-color: rgba(246, 166, 35, 0.45); background: var(--wf-accent-soft); }
+.wf-timer[data-state="warning"] .wf-timer__value { color: var(--wf-accent); }
+
+.wf-timer[data-state="danger"] { border-color: rgba(248, 113, 113, 0.5); background: var(--wf-danger-soft); }
+.wf-timer[data-state="danger"] .wf-timer__value { color: var(--wf-danger); animation: wf-tick 1s steps(2) infinite; }
+
+.wf-timer[data-state="over"] .wf-timer__value { color: var(--wf-danger); }
+
+@keyframes wf-tick { 50% { opacity: 0.45; } }
+
+/* progress pill */
+
+.wf-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  border: 1px solid var(--wf-line);
+  border-radius: 999px;
+  background: var(--wf-bg-soft);
+  font-size: 13px;
+  color: var(--wf-muted);
+  white-space: nowrap;
+}
+
+.wf-progress__count { font-family: var(--wf-mono); font-weight: 700; color: var(--wf-text); }
+
+.wf-progress__track {
+  width: 90px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--wf-surface-2);
+  overflow: hidden;
+}
+
+.wf-progress__fill {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--wf-accent), var(--wf-ok));
+  transition: width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ---------- main split ---------- */
+
+.wf-arena__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  min-height: 0;
+}
+
+.wf-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--wf-surface);
+  border: 1px solid var(--wf-line-soft);
+  border-radius: var(--wf-radius);
+}
+
+.wf-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--wf-line-soft);
+  background: var(--wf-bg-soft);
+}
+
+.wf-panel__title {
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--wf-dim);
+}
+
+.wf-panel__spacer { flex: 1; }
+
+.wf-panel__hint { font-size: 12px; color: var(--wf-dim); font-family: var(--wf-mono); }
+
+/* ---------- editor ---------- */
+
+.wf-tabs { display: flex; gap: 6px; }
+
+.wf-tab {
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wf-muted);
+  font: inherit;
+  font-family: var(--wf-mono);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wf-tab[aria-selected="true"] {
+  background: var(--wf-surface-2);
+  border-color: var(--wf-line);
+  color: var(--wf-accent);
+}
+
+.wf-editor { position: relative; flex: 1; min-height: 0; display: flex; }
+
+.wf-editor__area {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  padding: 16px 18px;
+  border: 0;
+  resize: none;
+  background: #0f141c;
+  color: #d8e2ee;
+  font-family: var(--wf-mono);
+  font-size: 13.5px;
+  line-height: 1.65;
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+}
+
+.wf-editor__area:focus { outline: none; box-shadow: inset 0 0 0 1px rgba(246, 166, 35, 0.35); }
+.wf-editor__area[hidden] { display: none; }
+.wf-editor__area:disabled { opacity: 0.6; }
+
+.wf-editor__foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--wf-line-soft);
+  background: var(--wf-bg-soft);
+}
+
+.wf-save {
+  font-size: 12px;
+  color: var(--wf-dim);
+  font-family: var(--wf-mono);
+  transition: color 0.2s ease;
+}
+.wf-save[data-state="saving"] { color: var(--wf-accent); }
+.wf-save[data-state="saved"] { color: var(--wf-ok); }
+.wf-save[data-state="error"] { color: var(--wf-danger); }
+
+/* ---------- right column ---------- */
+
+.wf-arena__right {
+  display: grid;
+  grid-template-rows: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.wf-preview {
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  width: 100%;
+  background: #ffffff;
+}
+
+/* ---------- objectives ---------- */
+
+.wf-objectives {
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.wf-objective {
+  display: flex;
+  gap: 11px;
+  padding: 9px 11px;
+  border-radius: var(--wf-radius-sm);
+  border: 1px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.wf-objective + .wf-objective { margin-top: 2px; }
+
+.wf-objective__mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--wf-line);
+  background: var(--wf-surface-2);
+  font-size: 11px;
+  color: var(--wf-dim);
+}
+
+.wf-objective__title { font-size: 14px; font-weight: 600; }
+
+.wf-objective__hint { display: block; font-size: 12.5px; color: var(--wf-dim); margin-top: 3px; }
+
+.wf-objective__tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--wf-surface-2);
+  color: var(--wf-dim);
+  font-family: var(--wf-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
+}
+
+.wf-objective.is-done { background: var(--wf-ok-soft); border-color: rgba(52, 211, 153, 0.28); }
+.wf-objective.is-done .wf-objective__mark { background: var(--wf-ok); border-color: var(--wf-ok); color: #04240f; }
+.wf-objective.is-done .wf-objective__hint { text-decoration: line-through; opacity: 0.6; }
+
+/* ---------- modal ---------- */
+
+.wf-modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(6, 9, 14, 0.78);
+  backdrop-filter: blur(4px);
+  z-index: 50;
+}
+
+.wf-modal[hidden] { display: none; }
+
+.wf-modal__box {
+  width: min(460px, 100%);
+  padding: 30px;
+  text-align: center;
+  animation: wf-rise 0.35s ease both;
+}
+
+.wf-modal__icon { font-size: 42px; line-height: 1; }
+.wf-modal__title { margin: 14px 0 8px; font-size: 26px; letter-spacing: -0.01em; }
+.wf-modal__text { margin: 0 0 22px; color: var(--wf-muted); }
+.wf-modal__actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+
+.wf-modal__score {
+  display: inline-block;
+  margin-bottom: 18px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--wf-bg-soft);
+  border: 1px solid var(--wf-line);
+  font-family: var(--wf-mono);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* ---------- responsive (small laptops) ---------- */
+
+@media (max-width: 1280px) {
+  .wf-arena__bar { gap: 12px; padding: 9px 14px; }
+  .wf-timer__value { font-size: 20px; }
+  .wf-progress__track { width: 64px; }
+}
+
+@media (max-width: 1080px) {
+  .wf-arena__brand span:last-child { display: none; }
+  .wf-progress__track { display: none; }
+}
+
+@media (max-width: 900px) {
+  body.wf-body--arena { overflow: auto; }
+  .wf-arena { height: auto; min-height: 100vh; }
+  .wf-arena__main { grid-template-columns: minmax(0, 1fr); }
+  .wf-panel--editor { min-height: 460px; }
+  .wf-arena__right { grid-template-rows: 380px 320px; }
+  .wf-arena__bar { flex-wrap: wrap; }
+}

@@ -1,5 +1,7 @@
 Django==5.1.2
-gunicorn
+channels==4.3.2
+daphne==4.2.3
+channels-redis==4.3.0
 whitenoise
 psycopg2-binary
 dj-database-url

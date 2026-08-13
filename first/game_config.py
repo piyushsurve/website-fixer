@@ -5,7 +5,7 @@ Everything the game needs to know about "what the player is fixing" and
 "how long they get" lives here, so views, checks and templates never
 hardcode duplicate copies of it.
 
-Round 01 is a **CSS-only** challenge. The challenge itself is not written in
+This is a **CSS-only** challenge. The challenge itself is not written in
 this file; it ships as three plain files under ``first/challenge/novacloud/``:
 
     index.html      the finished page -- READ ONLY, never edited or submitted
@@ -31,9 +31,10 @@ TIMER_WARNING_SECONDS = 10 * 60
 TIMER_SYNC_INTERVAL_SECONDS = 20
 
 
-# ---------------------------------------------------------------- round ----
+# ------------------------------------------------------------ challenge ----
 
-ROUND_NUMBER = '01'
+# There is one challenge, so it is named rather than numbered.
+CHALLENGE_LABEL = 'CSS Challenge'
 SITE_NAME = 'NovaCloud'
 SITE_TAGLINE = 'AI-powered cloud platform landing page'
 DIFFICULTY = 'Basic'

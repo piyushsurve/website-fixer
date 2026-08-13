@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Arena — Round {{ challenge.round }} · {{ challenge.site }}</title>
+  <title>Arena — {{ challenge.label }} · {{ challenge.site }}</title>
   <link rel="stylesheet" href="{% static 'css/wf-base.css' %}">
   <link rel="stylesheet" href="{% static 'css/wf-arena.css' %}">
 </head>
@@ -17,7 +17,7 @@
       <span class="wf-arena__brandtext">Website Fixer</span>
     </a>
 
-    <span class="wf-chip">Round {{ challenge.round }} · {{ challenge.site }}</span>
+    <span class="wf-chip">{{ challenge.label }} · {{ challenge.site }}</span>
 
     <span class="wf-arena__spacer"></span>
 
@@ -72,7 +72,7 @@
                   aria-label="CSS editor">{{ css }}</textarea>
 
         <!--
-          The markup is fixed for Round 01. It is shown so the player can read
+          The markup is fixed for this challenge. It is shown so the player can read
           the structure and work out which selectors apply; it is `readonly`
           here and the server ignores any `html` field that is posted back.
         -->

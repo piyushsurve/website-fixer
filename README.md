@@ -1,6 +1,7 @@
 # Website Fixer
 
-A timed **CSS debugging** game. Round 01 hands the player a finished
+A timed **CSS debugging** game. There is one challenge — **CSS Challenge ·
+NovaCloud** — which hands the player a finished
 cloud-platform landing page ("NovaCloud") whose stylesheet shipped broken, and
 gives them **30 minutes** to clear **14 CSS objectives**.
 

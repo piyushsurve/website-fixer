@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Website Fixer — Round {{ challenge.round }} · {{ challenge.site }}</title>
+  <title>Website Fixer — {{ challenge.label }} · {{ challenge.site }}</title>
   <link rel="stylesheet" href="{% static 'css/wf-base.css' %}">
   <link rel="stylesheet" href="{% static 'css/wf-home.css' %}">
 </head>
@@ -16,7 +16,7 @@
         <span class="wf-brand__mark">WF</span>
         <span>
           Website Fixer
-          <span class="wf-brand__sub">Round {{ challenge.round }} · {{ challenge.site }}</span>
+          <span class="wf-brand__sub">{{ challenge.label }} · {{ challenge.site }}</span>
         </span>
       </a>
 
@@ -40,7 +40,7 @@
     <!-- ===================== HERO ===================== -->
     <section class="wf-hero">
       <div class="wf-rise">
-        <span class="wf-badge wf-badge--accent">Round {{ challenge.round }} · {{ challenge.site }}</span>
+        <span class="wf-badge wf-badge--accent">{{ challenge.label }} · {{ challenge.site }}</span>
 
         <h1 class="wf-hero__title">Website<br><span>Fixer</span></h1>
 
@@ -129,7 +129,7 @@
     <section class="wf-section" id="round">
       <div class="wf-card wf-round">
         <div class="wf-round__body">
-          <span class="wf-round__no">Round {{ challenge.round }}</span>
+          <span class="wf-round__no">{{ challenge.label }}</span>
           <h2 class="wf-round__title">{{ challenge.site }}</h2>
           <p class="wf-round__text">
             Repair the stylesheet of a finished {{ challenge.tagline }}. The header collapsed,

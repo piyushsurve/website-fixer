@@ -372,7 +372,7 @@ def _scale_factor(value):
 # --------------------------------------------------------------------------
 # The objectives
 #
-# Round 01 is CSS only: the markup is read-only and is never submitted, so
+# The challenge is CSS only: the markup is read-only and never submitted, so
 # every objective below asks a question about the stylesheet. `style.css`
 # ships 37 deliberate defects and these 14 are the graded ones. Each check
 # asks about an outcome, so any equivalent repair passes.

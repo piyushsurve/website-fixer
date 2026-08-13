@@ -15,7 +15,7 @@ from .game_config import (
     DIFFICULTY,
     GAME_DURATION_SECONDS,
     MODE,
-    ROUND_NUMBER,
+    CHALLENGE_LABEL,
     SITE_NAME,
     SITE_TAGLINE,
     SOLUTION_CSS,
@@ -32,7 +32,7 @@ MAX_SUBMISSION_CHARS = 200_000
 
 # Everything the templates need to name the current round in one place.
 CHALLENGE = {
-    'round': ROUND_NUMBER,
+    'label': CHALLENGE_LABEL,
     'site': SITE_NAME,
     'tagline': SITE_TAGLINE,
     'difficulty': DIFFICULTY,
@@ -385,7 +385,7 @@ def user_logout(request):
 # ------------------------------------------------------------------ api ----
 
 def _read_submitted_css(request):
-    """Round 01 is CSS only: any `html` field in the POST is ignored.
+    """The challenge is CSS only: any `html` field in the POST is ignored.
 
     The markup the player sees is read-only and the markup the checker grades
     always comes from `CHALLENGE_HTML`, so a forged `html` parameter cannot

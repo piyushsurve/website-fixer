@@ -1,7 +1,7 @@
 """
 Regression tests for the challenge itself.
 
-Round 01 is CSS only. The markup is fixed, read-only and never accepted from
+The challenge is CSS only. The markup is fixed, read-only and never accepted
 the browser, so the properties that matter are: the shipped stylesheet fails
 every objective, the gold standard passes every one, each graded fix clears
 exactly its own box, equivalent answers are accepted, a posted `html` field
@@ -14,11 +14,13 @@ is ignored, and the clock cannot be restarted.
 
 import re
 from datetime import timedelta
+from io import StringIO
 
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.conf import settings
 from django.contrib.sessions.backends.db import SessionStore
+from django.core.management import call_command
 from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -401,7 +403,8 @@ class ArenaPageTests(TestCase):
         page = self.client.get(reverse('intro')).content.decode()
         self.assertIn('NovaCloud', page)
         self.assertIn('Repair the code. Beat the clock.', page)
-        self.assertIn('Round 01', page)
+        self.assertIn('CSS Challenge', page)
+        self.assertNotIn('Round 01', page)
         self.assertIn(str(TOTAL_CHECKS), page)
         self.assertIn('CSS DEBUGGING', page)
         self.assertIn('read-only', page)
@@ -1622,3 +1625,84 @@ class ForgottenPlayerTests(CompetitionMixin, TestCase):
         self.assertTrue(FinalSubmission.objects.filter(user=done).exists())
         self.assertFalse(FinalSubmission.objects.filter(user=live).exists(),
                          'a running round must not be submitted early')
+
+
+class EnsureAdminCommandTests(TestCase):
+    """The deploy-time admin account: created once, safe to re-run forever."""
+
+    PC_NO = 'admin123'
+    PASSWORD = 'piyush123456@'
+
+    def run_command(self):
+        out = StringIO()
+        call_command('ensure_admin', stdout=out)
+        return out.getvalue()
+
+    def test_it_creates_the_admin_account(self):
+        self.assertFalse(User.objects.filter(pc_no=self.PC_NO).exists())
+        self.run_command()
+
+        admin = User.objects.get(pc_no=self.PC_NO)
+        self.assertTrue(admin.is_admin)
+        self.assertTrue(admin.is_staff)
+        self.assertTrue(admin.is_superuser)
+        self.assertTrue(admin.is_active)
+        self.assertTrue(admin.check_password(self.PASSWORD))
+
+    def test_running_it_again_changes_nothing(self):
+        self.run_command()
+        original = User.objects.get(pc_no=self.PC_NO)
+
+        for _ in range(3):
+            output = self.run_command()
+            self.assertIn('already exists', output)
+
+        self.assertEqual(User.objects.filter(pc_no=self.PC_NO).count(), 1)
+        again = User.objects.get(pc_no=self.PC_NO)
+        self.assertEqual(again.pk, original.pk)
+        self.assertEqual(again.password, original.password)
+
+    def test_it_does_not_reset_a_password_changed_later(self):
+        self.run_command()
+        admin = User.objects.get(pc_no=self.PC_NO)
+        admin.set_password('something-else-entirely')
+        admin.save(update_fields=['password'])
+
+        self.run_command()
+
+        admin.refresh_from_db()
+        self.assertTrue(admin.check_password('something-else-entirely'))
+        self.assertFalse(admin.check_password(self.PASSWORD))
+
+    def test_the_login_field_is_the_pc_number_not_an_email(self):
+        self.run_command()
+        self.assertEqual(User.USERNAME_FIELD, 'pc_no')
+        self.assertNotIn('email', [f.name for f in User._meta.get_fields()])
+
+        # this is exactly what the admin login form posts
+        signed_in = self.client.login(pc_no=self.PC_NO, password=self.PASSWORD)
+        self.assertTrue(signed_in)
+
+    def test_the_admin_account_can_reach_the_judging_screens(self):
+        self.run_command()
+        self.client.login(pc_no=self.PC_NO, password=self.PASSWORD)
+
+        for url in (reverse('admin:index'),
+                    reverse('admin:first_user_changelist'),
+                    reverse('admin:first_finalsubmission_changelist')):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+
+    def test_it_creates_no_other_admin_accounts(self):
+        self.run_command()
+        self.assertEqual(
+            sorted(User.objects.filter(is_admin=True).values_list('pc_no', flat=True)),
+            [self.PC_NO],
+        )
+
+    def test_it_promotes_an_existing_non_admin_with_that_pc_number(self):
+        User.objects.create_user(username='someone', pc_no=self.PC_NO, password='pw-123456')
+        output = self.run_command()
+
+        self.assertIn('Granted admin rights', output)
+        self.assertTrue(User.objects.get(pc_no=self.PC_NO).is_admin)
+        self.assertEqual(User.objects.filter(pc_no=self.PC_NO).count(), 1)

@@ -52,8 +52,15 @@ class User(AbstractBaseUser):
 
     # -- django admin ------------------------------------------------------
 
+    # This model is an AbstractBaseUser without PermissionsMixin, so there is
+    # no `is_staff`/`is_superuser` column: `is_admin` is the single stored
+    # flag and these read from it.
     @property
     def is_staff(self):
+        return self.is_admin
+
+    @property
+    def is_superuser(self):
         return self.is_admin
 
     def has_perm(self, perm, obj=None):
